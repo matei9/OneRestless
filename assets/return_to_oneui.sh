@@ -19,6 +19,37 @@ pkill -9 -f org.lineageos 2>/dev/null || true
 pkill -9 -x zygote64 2>/dev/null || true
 kill -9 $(pidof surfaceflinger) 2>/dev/null || true
 
+# Kill every remaining guest daemon: anything whose executable lives on the
+# guest's system image (same filesystem device as the staged rootfs). The one
+# that matters most is the guest vold from master_inner.sh: it shares the binder
+# servicemanager and took over the "vold" name from the host's vold. Left alive
+# (or dead with the name gone), One UI's ActivityManager fails
+# vold.commitChanges() at boot-complete and reboots the phone with
+# "reboot,checkpoint_commit_failed" right after the boot animation.
+GUEST_DEV=$(stat -c %d /data/local/tmp/lineage_stage/rootfs/system/bin/vold 2>/dev/null)
+if [ -n "$GUEST_DEV" ]; then
+    for p in /proc/[0-9]*; do
+        [ "$(stat -L -c %d $p/exe 2>/dev/null)" = "$GUEST_DEV" ] || continue
+        echo "killing guest process $(basename $p) ($(cat $p/comm 2>/dev/null))"
+        kill -9 $(basename $p) 2>/dev/null || true
+    done
+fi
+# The host vold is still running but its "vold" registration was taken over by
+# the guest's. It must NOT be restarted (init reboots the phone with
+# "reboot,vold-failed"); svcstub kept its binder when the guest started, so have
+# it register that binder again. This must happen before One UI's system_server
+# comes back, or its vold.commitChanges() fails and it reboots the phone.
+touch /data/local/tmp/svcstub.restore
+i=0
+while [ "$i" -lt 20 ] && ! grep -q "^restored vold$" /data/local/tmp/svcstub.log 2>/dev/null; do
+    sleep 0.5; i=$((i + 1))
+done
+grep -E "^(restored|restore failed)" /data/local/tmp/svcstub.log 2>/dev/null
+# svcstub exits after restoring; its placeholder services (One UI's
+# system_server publishes the real ones) go with it.
+pkill -9 -f "onelineage.stub.ServiceStub" 2>/dev/null || true
+rm -f /data/local/tmp/svcstub.restore
+
 # Put the host's own /data trees back FIRST: master_prepare.sh bridges the
 # staged app trees (installd/artd write there), and the One UI launcher restore
 # below must read the host's real /data/user/0, not the guest's.
@@ -60,6 +91,27 @@ umount -l /storage/emulated 2>/dev/null || true
 umount -l /mnt/user/0/emulated 2>/dev/null || true
 mkdir -p /storage/emulated/0
 mount --bind /data/media/0 /storage/emulated/0 2>/dev/null || true
+
+# Restore One UI's dexopt settings (switch_to_lineage.sh turned background
+# dexopt down for the guest). Empty values are restored as empty, which is what
+# getprop reported for a property that was unset.
+DEXOPT_SAVED=/data/local/tmp/lineage_stage/host_dexopt.props
+if [ -f "$DEXOPT_SAVED" ]; then
+    RP=$(which resetprop 2>/dev/null || echo /data/adb/ksu/bin/resetprop)
+    while IFS='=' read -r k v; do
+        [ -n "$k" ] || continue
+        if [ -x "$RP" ]; then
+            if [ -n "$v" ]; then "$RP" "$k" "$v"; else "$RP" -d "$k"; fi
+        else
+            setprop "$k" "$v"
+        fi
+    done < "$DEXOPT_SAVED"
+    # Saved by an older version that didn't record it; One UI leaves it unset.
+    if ! grep -q '^pm.dexopt.disable_bg_dexopt=' "$DEXOPT_SAVED"; then
+        if [ -x "$RP" ]; then "$RP" -d pm.dexopt.disable_bg_dexopt; else setprop pm.dexopt.disable_bg_dexopt false; fi
+    fi
+    rm -f "$DEXOPT_SAVED"
+fi
 
 echo "=== [5/5] Starting One UI Display & Host Services ==="
 setprop ctl.start surfaceflinger
