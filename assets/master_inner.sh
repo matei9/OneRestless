@@ -89,6 +89,23 @@ echo "[Pivoted Root] Starting LineageOS wificond..."
 WIFICOND_PID=$!
 echo "[Pivoted Root] wificond PID: $WIFICOND_PID"
 
+# Bluetooth audio HAL. A2DP goes through an android.hardware.bluetooth.audio
+# provider. Samsung's vendor ships only the Seh-named fork, which the GSI's
+# AOSP bluetooth can't use ("No supported HAL version"), so headphones connect
+# but no stream opens. TrebleDroid ships a system-side generic HAL
+# (android.hardware.bluetooth.audio-service-system, flag
+# persist.bluetooth.system_audio_hal.enabled) that software-encodes and hands
+# PCM to the normal audio HAL. init would start it; we don't run init. Start it
+# ourselves when the vendor has no AOSP-named BT audio HAL of its own.
+BT_AUDIO_HAL=/system/bin/hw/android.hardware.bluetooth.audio-service-system
+if [ -x "$BT_AUDIO_HAL" ] && \
+   ! grep -qs "<name>android.hardware.bluetooth.audio</name>" \
+       /vendor/etc/vintf/manifest.xml /vendor/etc/vintf/manifest/*.xml; then
+    echo "[Pivoted Root] Starting system-side Bluetooth audio HAL..."
+    "$BT_AUDIO_HAL" > /data/bt_audio_hal.log 2>&1 &
+    echo "[Pivoted Root] bt-audio-hal PID: $!"
+fi
+
 # Guest idmap2d (see switch_to_lineage.sh): writes idmaps for the guest's
 # fabricated theme overlays into the guest's /data/resource-cache.
 if [ -x /system/bin/idmap2d ]; then
