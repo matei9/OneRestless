@@ -80,6 +80,33 @@ echo "[Pivoted Root] Starting LineageOS wificond..."
 /system/bin/wificond > /data/wificond.log 2>&1 &
 WIFICOND_PID=$!
 echo "[Pivoted Root] wificond PID: $WIFICOND_PID"
+
+# Guest idmap2d (see switch_to_lineage.sh): writes idmaps for the guest's
+# fabricated theme overlays into the guest's /data/resource-cache.
+if [ -x /system/bin/idmap2d ]; then
+    echo "[Pivoted Root] Starting guest idmap2d..."
+    /system/bin/idmap2d > /data/idmap2d.log 2>&1 &
+    echo "[Pivoted Root] idmap2d PID: $!"
+fi
+# Guest artd: system_server's ArtService dexopts through it. Without it every
+# app runs unoptimized (slow, more CPU). Boot-time dexopt stays skipped
+# (patch_smali), so this only serves per-app and background compilation.
+# IMPORTANT: /data/misc/apexdata must stay system:system 0771. Creating any
+# child dir here as root would leave the parent root-owned on first run and
+# NetworkStatsServiceInitializer in system_server (uid 1000) then crashes
+# system_server with:
+#   IllegalStateException: Cannot write into stats data directory:
+#     /data/misc/apexdata/com.android.tethering/netstats
+# So fix up the parent before starting artd (master_prepare pre-creates the
+# tethering/netstats dir on disk, we only need to repair ownership here).
+if [ -x /apex/com.android.art/bin/artd ]; then
+    echo "[Pivoted Root] Starting guest artd..."
+    mkdir -p /data/misc/apexdata/com.android.art/dalvik-cache
+    chown -R 1000:1000 /data/misc/apexdata 2>/dev/null || true
+    chmod 0771 /data/misc/apexdata 2>/dev/null || true
+    /apex/com.android.art/bin/artd > /data/artd.log 2>&1 &
+    echo "[Pivoted Root] artd PID: $!"
+fi
 sleep 1
 
 # Overlay idmaps. idmap2 refuses the GSI's product overlays because framework-res
@@ -114,5 +141,61 @@ echo "[Pivoted Root] App storage sweeper started..."
 echo "[Pivoted Root] Cleaning stale sockets..."
 rm -f /dev/socket/zygote /dev/socket/usap_pool_primary 2>/dev/null || true
 
-echo "[Pivoted Root] Launching LineageOS Zygote & SystemServer via zygote_exec..."
-exec /data/zygote_exec
+# Classpaths are derived at runtime from what is actually mounted in this
+# container (system + APEX classpath fragments), exactly as init does with
+# derive_classpath on a real boot - so any GSI / host-APEX mix gets matching
+# BOOTCLASSPATH etc. zygote_exec is built with --inherit-env and passes this
+# environment straight to app_process64.
+echo "[Pivoted Root] Deriving classpaths..."
+mkdir -p /data/system/environ
+CPF=/data/system/environ/classpath
+rm -f "$CPF"
+/apex/com.android.sdkext/bin/derive_classpath "$CPF" > /data/derive_classpath.log 2>&1
+if ! grep -q "BOOTCLASSPATH" "$CPF" 2>/dev/null; then
+    echo "[Pivoted Root] derive_classpath failed ($(tail -n1 /data/derive_classpath.log)); using /data/zygote_classpath.env"
+    sed 's/^\([A-Z_]*\)=/export \1 /' /data/zygote_classpath.env 2>/dev/null | grep '^export' > "$CPF"
+fi
+ZENV=""
+while read -r kw name val; do
+    [ "$kw" = "export" ] && [ -n "$name" ] && ZENV="$ZENV $name=$val" && eval "$name=\$val"
+done < "$CPF"
+echo "[Pivoted Root] BOOTCLASSPATH: $(echo "$BOOTCLASSPATH" | tr ':' '\n' | grep -c .) jars, SYSTEMSERVERCLASSPATH: $(echo "$SYSTEMSERVERCLASSPATH" | tr ':' '\n' | grep -c .) jars"
+cp -f "$CPF" /data/zygote_classpath.used 2>/dev/null
+cp_missing=0
+for jar in $(echo "$BOOTCLASSPATH:$SYSTEMSERVERCLASSPATH:$STANDALONE_SYSTEMSERVER_JARS" | tr ':' ' '); do
+    [ -f "$jar" ] || { echo "[Pivoted Root] MISSING classpath jar: $jar"; cp_missing=$((cp_missing + 1)); }
+done
+echo "[Pivoted Root] classpath check: $cp_missing missing"
+
+# Diagnostic: md5sums of the binaries the zygote is about to load. If the pivot
+# is clean these should match the GSI image; a host-side build id in a crash
+# dump then points at this list for the culprit.
+echo "[Pivoted Root] pivoted-env binaries (md5 of what app_process64 and zygote will load):"
+for f in /system/bin/app_process64 /system/lib64/libandroid_runtime.so \
+         /system/lib64/libart.so /apex/com.android.art/lib64/libart.so \
+         /system/framework/framework.jar /system/framework/services.jar \
+         /system/lib64/libbinder.so /system/lib64/libnativeloader.so; do
+    if [ -f "$f" ]; then
+        s=$(md5sum "$f" 2>/dev/null | cut -c1-12)
+        sz=$(stat -c %s "$f" 2>/dev/null)
+        echo "  $s  $sz  $f"
+    else
+        echo "  MISSING          $f"
+    fi
+done
+# Also show the actual loader namespace config
+echo "[Pivoted Root] /linkerconfig head (what the linker sees for the system namespace):"
+if [ -f /linkerconfig/ld.config.txt ]; then
+    grep -E "^(dir\.|namespace\.default\.search\.paths|namespace\.default\.permitted\.paths|namespace\.system\.search\.paths)" /linkerconfig/ld.config.txt | head -20
+else
+    ls /linkerconfig 2>&1 | head -5
+fi
+
+echo "[Pivoted Root] Launching Zygote & SystemServer via zygote_exec..."
+exec env -i ANDROID_SOCKET_zygote=3 ANDROID_SOCKET_usap_pool_primary=4 \
+    PATH=/system/bin:/system/xbin ANDROID_ROOT=/system ANDROID_DATA=/data ANDROID_STORAGE=/storage \
+    ANDROID_ART_ROOT=/apex/com.android.art ANDROID_I18N_ROOT=/apex/com.android.i18n \
+    ANDROID_TZDATA_ROOT=/apex/com.android.tzdata EXTERNAL_STORAGE=/sdcard \
+    ASEC_MOUNTPOINT=/mnt/asec ANDROID_ASSETS=/system/app $ZENV \
+    /data/zygote_exec
+

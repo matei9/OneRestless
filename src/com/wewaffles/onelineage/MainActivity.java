@@ -62,10 +62,13 @@ public class MainActivity extends Activity {
     private static final String STAGE_DIR = "/data/local/tmp/lineage_stage";
     private static final String SYSTEM_RAW = STAGE_DIR + "/system.raw";
 
-    private static final String URL_VANILLA = "https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2016/LineageOS-23.2-20260524-VANILLA-EXT4-GSI.7z?use_mirror=autoselect";
-    private static final String URL_GAPPS = "https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2016/LineageOS-23.2-20260524-GAPPS-EXT4-GSI.7z?use_mirror=autoselect";
-    private static final long ESTIMATED_VANILLA_BYTES = 922022276L;
-    private static final long ESTIMATED_GAPPS_BYTES = 1167859370L;
+    // LineageOS 24.0 (Android 17, CP2A.260605.016) EXT4 arm64 GSI. Must match the
+    // host's Android 17 build: the container borrows the host's APEX modules.
+    // No LineageOS 24 GApps GSI has been published yet, so GAPPS uses the same image.
+    private static final String URL_VANILLA = "https://github.com/ods-releases/arm64/releases/download/lineage-24.0-20261016-UNOFFICIAL-arm64-gsi/lineage-24.0-20261016-UNOFFICIAL-arm64-gsi.img.tar.gz";
+    private static final String URL_GAPPS = URL_VANILLA;
+    private static final long ESTIMATED_VANILLA_BYTES = 1751441951L;
+    private static final long ESTIMATED_GAPPS_BYTES = 1751441951L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -119,7 +122,7 @@ public class MainActivity extends Activity {
         cardFlavorVanilla.setOnClickListener(clickVanilla);
         cardFlavorGapps.setOnClickListener(clickGapps);
 
-        selectFlavor(Flavor.GAPPS);
+        selectFlavor(Flavor.VANILLA);
     }
 
     private void selectFlavor(Flavor flavor) {
@@ -135,7 +138,7 @@ public class MainActivity extends Activity {
                 tvDownloadDesc.setText("Vanilla: The lightweight option");
                 break;
             case GAPPS:
-                tvDownloadDesc.setText("MindTheGapps: LineageOS 23.2 + Google Play Store & Services.");
+                tvDownloadDesc.setText("No LineageOS 24 GApps GSI exists yet - this installs Vanilla.");
                 break;
         }
     }
@@ -286,15 +289,29 @@ public class MainActivity extends Activity {
             String[] assets = {
                 "switch_to_lineage.sh", "return_to_oneui.sh",
                 "master_prepare.sh", "master_inner.sh",
-                "zygote_exec", "clean_apex_info_list.xml",
+                "zygote_exec", "zygote_classpath.env", "clean_apex_info_list.xml",
                 "services_patched.jar", "framework_patched.jar",
-                "7zz", "PermissionController_patched.apk"
+                "service-connectivity_patched.jar",
+                "7zz"
             };
             File filesDir = getFilesDir();
+            // Large jars are only skipped when this exact install already
+            // extracted them; any app update (new lastUpdateTime) re-extracts
+            // everything, otherwise patched jars from a new build never deploy.
+            long installStamp = 0;
+            try {
+                installStamp = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime;
+            } catch (Exception ignored) {}
+            File stampFile = new File(filesDir, ".assets_stamp");
+            boolean sameInstall = false;
+            try (BufferedReader r = new BufferedReader(new java.io.FileReader(stampFile))) {
+                sameInstall = Long.parseLong(r.readLine().trim()) == installStamp;
+            } catch (Exception ignored) {}
+            if (!sameInstall) appendLog("App updated - re-extracting all engine assets (incl. patched jars)...");
             for (String asset : assets) {
                 File target = new File(filesDir, asset);
-                if (target.exists() && target.length() > 0 && asset.endsWith(".jar")) {
-                    continue; // Skip re-extracting large jars if already present
+                if (sameInstall && target.exists() && target.length() > 0 && asset.endsWith(".jar")) {
+                    continue; // already extracted by this install
                 }
                 try (InputStream in = getAssets().open(asset);
                      OutputStream out = new FileOutputStream(target)) {
@@ -309,10 +326,15 @@ public class MainActivity extends Activity {
                     appendLog("Error unpacking " + asset + ": " + e.getMessage());
                 }
             }
+            try (OutputStream out = new FileOutputStream(stampFile)) {
+                out.write(Long.toString(installStamp).getBytes());
+            } catch (Exception ignored) {}
             if (isRootGranted) {
                 try {
                     Runtime.getRuntime().exec(new String[]{
                         suBinary, "-c",
+                        // Android 17 branch: the S26/Android 16 PermissionController patch must not linger
+                        "rm -f " + filesDir.getAbsolutePath() + "/PermissionController_patched.apk " + STAGE_DIR + "/PermissionController_patched.apk; " +
                         "mkdir -p " + STAGE_DIR + " && " +
                         "for f in " + filesDir.getAbsolutePath() + "/*; do " +
                         "  base=$(basename \"$f\"); " +
@@ -453,7 +475,7 @@ public class MainActivity extends Activity {
                 // actual cause of "lineage_dl.7z: open failed: EACCES"). su (used below
                 // for extraction) can read the app's cache dir fine, same as
                 // extractAssets() already does for the other staged files.
-                final File targetArchive = new File(getCacheDir(), "lineage_dl.7z");
+                final File targetArchive = new File(getCacheDir(), downloadUrl.contains(".tar.gz") ? "lineage_dl.img.tar.gz" : "lineage_dl.7z");
 
                 appendLog("[NETWORK DOWNLOAD] Fetching " + flavor.name() + " edition directly via native HTTP engine...");
                 appendLog("URL: " + downloadUrl);
@@ -468,21 +490,25 @@ public class MainActivity extends Activity {
                     tvDownloadProgress.setText("Decompressing image with ARM64 7-Zip…");
                 });
 
-                appendLog("Extracting " + targetArchive.getAbsolutePath() + " via native 7zz...");
+                boolean isTarGz = targetArchive.getName().endsWith(".tar.gz");
+                appendLog("Extracting " + targetArchive.getAbsolutePath() + (isTarGz ? " via tar..." : " via native 7zz..."));
+                String unpack = isTarGz
+                        ? "tar -xzf " + targetArchive.getAbsolutePath() + " -C " + STAGE_DIR
+                        : STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + " " + targetArchive.getAbsolutePath();
                 String extractCmd = "rm -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + "; " +
-                                   STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + " " + targetArchive.getAbsolutePath() + " && " +
+                                   unpack + " && " +
                                    "mv -f " + STAGE_DIR + "/*.img " + SYSTEM_RAW + " && " +
                                    "rm -f " + targetArchive.getAbsolutePath() + " && chmod 644 " + SYSTEM_RAW;
                 int extRet = runRootCmdDrained(extractCmd);
                 if (extRet != 0 || !new File(SYSTEM_RAW).exists()) {
-                    throw new Exception("7zz extraction failed (exit " + extRet + ") - system.raw was not produced");
+                    throw new Exception("Extraction failed (exit " + extRet + ") - system.raw was not produced");
                 }
 
                 appendLog("✓ Extraction complete -> system.raw ready!");
 
                 mainHandler.post(() -> {
                     pbDownload.setVisibility(View.GONE);
-                    tvDownloadProgress.setText("LineageOS 23.2 (" + flavor.name() + ") installed successfully!");
+                    tvDownloadProgress.setText("LineageOS 24.0 (" + flavor.name() + ") installed successfully!");
                     btnDownloadLineage.setEnabled(true);
                 });
                 setLogStatus("Ready");
@@ -568,7 +594,7 @@ public class MainActivity extends Activity {
                     // truncating frees the backing blocks immediately even though rm -f
                     // alone would leave them held open by that loop device.
                     "truncate -s 0 " + SYSTEM_RAW + " 2>/dev/null || true; " +
-                    "rm -f " + SYSTEM_RAW + " " + STAGE_DIR + "/*.img " + STAGE_DIR + "/*.7z " + STAGE_DIR + "/*.img.tmp; " +
+                    "rm -f " + SYSTEM_RAW + " " + STAGE_DIR + "/*.img " + STAGE_DIR + "/*.7z " + STAGE_DIR + "/*.tar.gz " + STAGE_DIR + "/*.img.tmp; " +
                     "rm -rf " + STAGE_DIR + "/data " + STAGE_DIR + "/rootfs; " +
                     "mkdir -p " + STAGE_DIR + "/rootfs; " +
                     "if [ -f " + SYSTEM_RAW + " ]; then echo 'WARNING: system.raw still present!'; else echo 'Container unmounted, data wiped, and storage freed.'; fi";
@@ -604,7 +630,7 @@ public class MainActivity extends Activity {
             appendLog("ERROR: Root privilege required to boot LineageOS!");
             return;
         }
-        appendLog("\n[START] Preparing LineageOS 23.2 takeover...");
+        appendLog("\n[START] Preparing LineageOS 24.0 takeover...");
         setLogStatus("Switching…");
         executor.execute(() -> {
             try {
@@ -639,6 +665,33 @@ public class MainActivity extends Activity {
     private void returnToOneUI() {
         if (!isRootGranted) {
             appendLog("ERROR: Root privilege required to restore One UI!");
+            return;
+        }
+        // When this activity is running inside the guest, calling `su` sends the
+        // request through KernelSU's su binary and KernelSU tries to prompt its
+        // manager app (me.weishu.kernelsu) for approval. The guest doesn't have
+        // KernelSU Manager installed; zygote's fork-and-specialize for it dies
+        // on `/data_mirror/data_de/null/0/me.weishu.kernelsu` ENOENT and takes
+        // the whole guest down with a JNI FatalError. A reboot is a clean exit
+        // in that case - the container's state is already in /data/local/tmp,
+        // nothing to persist here.
+        boolean inGuest = !"samsung".equalsIgnoreCase(android.os.Build.MANUFACTURER);
+        if (inGuest) {
+            appendLog("\n[START] Running inside the guest - rebooting to return to One UI...");
+            setLogStatus("Rebooting…");
+            executor.execute(() -> {
+                try {
+                    // Try root first; if it isn't granted here (common in guest),
+                    // fall back to the ActivityManager reboot API via `svc power`.
+                    Runtime.getRuntime().exec(new String[]{suBinary, "-c", "reboot"}).waitFor();
+                } catch (Exception ignored) {}
+                try {
+                    Runtime.getRuntime().exec(new String[]{"sh", "-c", "svc power reboot || reboot"}).waitFor();
+                } catch (Exception e) {
+                    appendLog("Reboot error: " + e.getMessage());
+                    setLogStatus("Error");
+                }
+            });
             return;
         }
         appendLog("\n[START] Restoring One UI and resetting display...");

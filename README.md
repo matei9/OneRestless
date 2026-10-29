@@ -1,6 +1,13 @@
 # OneLineage
 
- **NOTE: OneLineage is just a proof of concept, this repo should provide you with enough to port other roms to bootloader locked devices, the lineageos with this repo is just a demo of this capability, and therefore does not fully work. Have fun!**
+**NOTE: OneLineage is just a proof of concept, this repo should provide you with enough to port other roms to bootloader locked devices, the lineageos with this repo is just a demo of this capability, and therefore does not fully work. Have fun!**
+
+> ## Galaxy A17 5G / One UI 9 / RestlessOS fork
+>
+> This fork targets the **RestlessOS (Android 17) GSI** on a bootloader-locked **Galaxy A17 5G** running One UI 9.
+> It builds on Dylan's One UI 9 / RestlessOS port (`restlessos` branch). The patched framework jars must match the
+> staged GSI build; see [PATCHES.md](PATCHES.md) for how to regenerate them.
+> The host's `/dev/softdog` is fed while the guest runs, so the phone no longer reboots ~100 s after switching.
 
 Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on a rooted Samsung phone, with no reflashing and no second partition. OneLineage stages the GSI under `/data/local/tmp`, pivots into it as a container with its own zygote and system_server, and can hand the screen back to One UI.
 

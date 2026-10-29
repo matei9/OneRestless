@@ -7,6 +7,9 @@ pkill -9 -f "ctl.stop zygote" 2>/dev/null || true
 pkill -9 -f "kill -STOP" 2>/dev/null || true
 pkill -9 -f "ui_activator" 2>/dev/null || true
 pkill -9 -f "zygote_exec" 2>/dev/null || true
+# Guest idmap2d/artd (started by master_inner.sh); the host's are lazy
+# services that init restarts on demand.
+kill -9 $(pidof idmap2d) $(pidof artd) 2>/dev/null || true
 # Stop the adb watchdog started by switch_to_lineage.sh before One UI's own
 # system_server comes back, so it cannot fight init over sys.usb.config.
 pkill -9 -f "adb_watchdog.sh" 2>/dev/null || true
@@ -40,6 +43,7 @@ fi
 echo "=== [3/5] Unmounting Container Overlays ==="
 umount -l /data/local/tmp/lineage_stage/rootfs/* 2>/dev/null || true
 umount -l /data/local/tmp/lineage_stage/rootfs/apex/* 2>/dev/null || true
+umount -l /data/local/tmp/lineage_stage/product_overlay 2>/dev/null || true
 while mount | grep -q "/data/local/tmp/lineage_stage/rootfs"; do
     umount -l /data/local/tmp/lineage_stage/rootfs 2>/dev/null || true
     sleep 0.1

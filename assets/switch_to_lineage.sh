@@ -20,7 +20,7 @@ set_prop() {
 
 BACKUP_DIR="/data/local/tmp/lineage_backups"
 
-echo "=== LINEAGEOS 23.2 TAKEOVER STARTING ==="
+echo "=== LINEAGEOS 24.0 TAKEOVER STARTING ==="
 
 # Put SELinux in permissive mode for the duration of the takeover. The guest
 # userspace is a foreign, unlabelled-for-this-policy userspace: its
@@ -291,6 +291,16 @@ kill -9 $(pidof media.codec) $(pidof media.metrics) 2>/dev/null || true
 # vendor HAL.
 setprop ctl.stop wificond 2>/dev/null || true
 kill -9 $(pidof wificond) 2>/dev/null || true
+
+# Same handover for idmap2d (the "idmap" binder service). The guest's
+# OverlayManagerService asks for it to build idmaps for SystemUI's fabricated
+# Monet overlays (/data/resource-cache/*.frro). If the request reaches the
+# HOST's idmap2d, the idmap files land in the host's /data/resource-cache, not
+# the guest's, so every guest process fails to load them on every resource
+# lookup and logs a full stack trace (~40k lines/min) - the main source of the
+# idle CPU load and heat. The guest's own idmap2d starts in master_inner.sh.
+setprop ctl.stop idmap2d 2>/dev/null || true
+kill -9 $(pidof idmap2d) 2>/dev/null || true
 sleep 1
 
 # Suppress the host zygote only, so Samsung init does not resurrect it
@@ -301,6 +311,7 @@ cp -f "$STAGE/master_inner.sh" "$STAGE/data/master_inner.sh"
 chmod 755 "$STAGE/data/master_inner.sh"
 cp -f "$STAGE/zygote_exec" "$STAGE/data/zygote_exec"
 chmod 755 "$STAGE/data/zygote_exec"
+cp -f "$STAGE/zygote_classpath.env" "$STAGE/data/zygote_classpath.env" 2>/dev/null || true
 
 # Launch takeover inside isolated mount namespace
 $BB unshare -m $BB sh "$STAGE/data/master_inner.sh" </dev/null >"$STAGE/data/takeover.log" 2>&1 &
