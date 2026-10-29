@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Galaxy A17 5G (SM-A176B, a17x) values, taken from One UI 9's own overlays
+     (framework-res__a17xxx__auto_generated_rro_product, the vendor RRO) and
+     from what the host reports in dumpsys display. -->
+<resources>
+    <!-- 1080x2340 @ 450dpi, centered punch hole; host DisplayCutout insets top=100px. -->
+    <string name="config_mainBuiltInDisplayCutout" translatable="false">M 0,0 H -24.88888888888889 V 35.55555555555556 H 24.88888888888889 V 0 H 0 Z @dp</string>
+    <string name="config_mainBuiltInDisplayCutoutRectApproximation" translatable="false">M 0,0 H -24.88888888888889 V 35.55555555555556 H 24.88888888888889 V 0 H 0 Z @dp</string>
+    <dimen name="status_bar_height_portrait">100px</dimen>
+
+    <!-- Host RoundedCorners radius 110px = 39dp. -->
+    <dimen name="rounded_corner_radius">39dp</dimen>
+    <dimen name="rounded_corner_radius_top">39dp</dimen>
+    <dimen name="rounded_corner_radius_bottom">39dp</dimen>
+
+    <!-- Panel supports 90 Hz and 60 Hz. -->
+    <integer name="config_defaultPeakRefreshRate">90</integer>
+
+    <bool name="config_automatic_brightness_available">true</bool>
+    <dimen name="config_screenBrightnessSettingMinimumFloat">0.0</dimen>
+    <dimen name="config_screenBrightnessSettingMaximumFloat">1.0</dimen>
+    <dimen name="config_screenBrightnessSettingDefaultFloat">0.5019608</dimen>
+    <dimen name="config_screenBrightnessDimFloat">0.047058824</dimen>
+
+    <bool name="config_showNavigationBar">true</bool>
+    <bool name="config_unplugTurnsOnScreen">true</bool>
+    <!-- Long-press power opens the power menu. -->
+    <integer name="config_longPressOnPowerBehavior">1</integer>
+</resources>

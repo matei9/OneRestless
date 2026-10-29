@@ -132,18 +132,38 @@ fi
 # must exist in the container even when the GSI has no product/apex dir (Google's
 # GSI doesn't). In that case lay a tmpfs-backed overlay over the GSI's product
 # partition (its files stay visible, the image is untouched) to create the dir.
+#
+# The same layer carries this device's treble overlays (built from overlay/<Name><device>
+# into treble-overlay-<Name><device>.apk, matched against ro.product.vendor.device),
+# installed as preinstalled /product/overlay packages.
 PRODUCT_DIR="$(in_rootfs /product)"
 PRODUCT_APEX="$PRODUCT_DIR/apex"
-if [ -d /product/apex ] && [ ! -d "$PRODUCT_APEX" ] && [ -d "$PRODUCT_DIR" ]; then
+DEVICE=$(getprop ro.product.vendor.device | tr 'A-Z' 'a-z')
+DEVICE_OVERLAYS=""
+for f in "$STAGE"/treble-overlay-*.apk; do
+    [ -f "$f" ] || continue
+    case "$(basename "$f" .apk | tr 'A-Z' 'a-z')" in *"$DEVICE") DEVICE_OVERLAYS="$DEVICE_OVERLAYS $f" ;; esac
+done
+if [ -d "$PRODUCT_DIR" ] && ! mount | grep -q " $PRODUCT_DIR type overlay " && \
+   { [ -n "$DEVICE_OVERLAYS" ] || { [ -d /product/apex ] && [ ! -d "$PRODUCT_APEX" ]; }; }; then
     OV="$STAGE/product_overlay"
     mkdir -p "$OV"
     mount | grep -q " $OV " || $BB mount -t tmpfs tmpfs "$OV"
-    mkdir -p "$OV/upper/apex" "$OV/work"
+    mkdir -p "$OV/upper" "$OV/work"
+    [ -d /product/apex ] && mkdir -p "$OV/upper/apex"
     if mount -t overlay overlay -o "lowerdir=$PRODUCT_DIR,upperdir=$OV/upper,workdir=$OV/work" "$PRODUCT_DIR" 2>/dev/null; then
-        echo "Overlaid $PRODUCT_DIR to add an apex/ mountpoint"
+        echo "Overlaid $PRODUCT_DIR (apex/ mountpoint, device overlays)"
     else
-        echo "!!! WARNING: could not overlay $PRODUCT_DIR - host /product/apex APEXes will be missing"
+        echo "!!! WARNING: could not overlay $PRODUCT_DIR - host /product/apex APEXes and device overlays will be missing"
     fi
+fi
+if [ -n "$DEVICE_OVERLAYS" ] && mount | grep -q " $PRODUCT_DIR type overlay "; then
+    mkdir -p "$PRODUCT_DIR/overlay"
+    for f in $DEVICE_OVERLAYS; do
+        cp -f "$f" "$PRODUCT_DIR/overlay/" && chmod 644 "$PRODUCT_DIR/overlay/$(basename "$f")" &&
+            chcon u:object_r:system_file:s0 "$PRODUCT_DIR/overlay/$(basename "$f")" 2>/dev/null
+        echo "Device overlay: $(basename "$f")"
+    done
 fi
 if [ -d /product/apex ] && [ -d "$PRODUCT_APEX" ]; then
     mount | grep -q " $PRODUCT_APEX " || $BB mount --bind /product/apex "$PRODUCT_APEX"

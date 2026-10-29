@@ -121,3 +121,22 @@ adb pull /data/local/tmp/host_framework.jar && java -jar apktool.jar d -f --no-r
 python3 tools/patch_smali.py fw svc hfw
 python3 tools/graft_dex.py framework.jar fw_built.jar assets/framework_patched.jar classes2.dex classes3.dex
 ```
+
+## Device overlays (`overlay/`)
+`build_apk.sh` builds every `overlay/<Name>` into `assets/treble-overlay-<Name>.apk`
+(signed with the app's debug key). `master_prepare.sh` installs the ones whose name
+ends in the host's `ro.product.vendor.device` into the guest's `/product/overlay`.
+To do that it puts a tmpfs overlayfs layer over the GSI's product partition, so the
+image itself is never modified. The overlays use `targetSdkVersion 28`: OMS only skips
+the overlayable check for pre-Q overlays on system partitions, and framework-res
+doesn't declare these config resources overlayable.
+
+`FrameworkResA17x` / `SystemUIA17x` (Galaxy A17 5G, a17x) take their values from One UI 9's
+`framework-res__a17xxx__auto_generated_rro_product` and vendor RRO, and from the
+host's `dumpsys display`:
+- punch-hole cutout, 100px status bar, 39dp rounded corners
+- 90 Hz peak refresh
+- brightness and auto-brightness curves: only the 1..255 part, up to 420 nits.
+  One UI drives the panel up to 665 / 1050 nits with brightness floats above 1.0,
+  which AOSP clamps.
+- power profile, nav bar, long-press power behaviour

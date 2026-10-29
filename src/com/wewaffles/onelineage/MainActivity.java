@@ -293,6 +293,7 @@ public class MainActivity extends Activity {
                 "zygote_exec", "zygote_classpath.env", "clean_apex_info_list.xml",
                 "services_patched.jar", "framework_patched.jar",
                 "service-connectivity_patched.jar", "svcstub.dex",
+                "treble-overlay-FrameworkResA17x.apk", "treble-overlay-SystemUIA17x.apk",
                 "7zz"
             };
             File filesDir = getFilesDir();

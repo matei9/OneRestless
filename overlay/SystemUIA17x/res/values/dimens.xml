@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Keeps status bar icons clear of the 39dp corners (One UI: 45px). -->
+    <dimen name="rounded_corner_content_padding">16dp</dimen>
+</resources>

@@ -58,6 +58,37 @@ $D8 --lib "$PLATFORM_JAR" --output "$BUILD_DIR/svcstub/dex" \
     "$BUILD_DIR/svcstub/classes/com/wewaffles/onelineage/stub"/*.class
 cp "$BUILD_DIR/svcstub/dex/classes.dex" "$ASSETS_SRC/svcstub.dex"
 
+KEYSTORE="$PROJECT_DIR/keystore/debug.keystore"
+if [ ! -f "$KEYSTORE" ]; then
+    mkdir -p "$PROJECT_DIR/keystore"
+    keytool -genkey -v \
+        -keystore "$KEYSTORE" \
+        -storepass android \
+        -alias androiddebugkey \
+        -keypass android \
+        -keyalg RSA \
+        -keysize 2048 \
+        -validity 10000 \
+        -dname "CN=OneLineage,O=WeWaffles,C=US"
+fi
+
+echo "=== 1d. Building device overlays (overlay/*) ==="
+# Each overlay/<Name> becomes assets/treble-overlay-<Name>.apk; master_prepare.sh
+# installs the ones for the host device into the guest's /product/overlay.
+for ov in overlay/*/; do
+    name=$(basename "$ov")
+    mkdir -p "$BUILD_DIR/overlay/$name"
+    $AAPT2 compile --dir "$ov/res" -o "$BUILD_DIR/overlay/$name/res.zip"
+    $AAPT2 link -I "$PLATFORM_JAR" --manifest "$ov/AndroidManifest.xml" \
+        -o "$BUILD_DIR/overlay/$name/unsigned.apk" "$BUILD_DIR/overlay/$name/res.zip"
+    $ZIPALIGN "$BUILD_DIR/overlay/$name/unsigned.apk" "$BUILD_DIR/overlay/$name/aligned.apk"
+    $APKSIGNER sign --ks "$KEYSTORE" --ks-pass pass:android --ks-key-alias androiddebugkey \
+        --key-pass pass:android --v4-signing-enabled false \
+        --out "$ASSETS_SRC/treble-overlay-$name.apk" \
+        "$BUILD_DIR/overlay/$name/aligned.apk"
+    echo "overlay: treble-overlay-$name.apk"
+done
+
 if [ -n "$EXTRA_ASSETS_DIR" ]; then
     for f in "$EXTRA_ASSETS_DIR"/*; do
         case "$f" in *.txt|*.md) continue;; esac
@@ -97,20 +128,6 @@ cd "$PROJECT_DIR"
 
 echo "=== 7. Aligning APK with zipalign ==="
 $ZIPALIGN "$BUILD_DIR/base.apk" "$BUILD_DIR/aligned.apk"
-
-KEYSTORE="$PROJECT_DIR/keystore/debug.keystore"
-if [ ! -f "$KEYSTORE" ]; then
-    mkdir -p "$PROJECT_DIR/keystore"
-    keytool -genkey -v \
-        -keystore "$KEYSTORE" \
-        -storepass android \
-        -alias androiddebugkey \
-        -keypass android \
-        -keyalg RSA \
-        -keysize 2048 \
-        -validity 10000 \
-        -dname "CN=OneLineage,O=WeWaffles,C=US"
-fi
 
 $APKSIGNER sign \
     --ks "$KEYSTORE" \
