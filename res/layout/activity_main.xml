@@ -39,7 +39,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="OneLineage"
+                android:text="OneRestless"
                 android:textColor="@color/m3_text_primary"
                 android:textSize="26sp"
                 android:fontFamily="sans-serif-medium"
@@ -96,7 +96,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="LineageOS Image: Checking…"
+                android:text="RestlessOS Image: Checking…"
                 android:textColor="@color/m3_text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -156,7 +156,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LineageOS 24.0 Image"
+                android:text="RestlessOS 17 Image"
                 android:textColor="@color/m3_primary"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-medium" />
@@ -166,7 +166,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Select variant to download from official releases:"
+                android:text="Downloads the latest RestlessOS GSI from GitHub:"
                 android:textColor="@color/m3_text_secondary"
                 android:textSize="13sp" />
 
@@ -206,7 +206,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Vanilla (Clean LineageOS)"
+                            android:text="RestlessOS 17.0.0 (arm64, 2026-10-28)"
                             android:textColor="@color/m3_text_primary"
                             android:textSize="14sp"
                             android:fontFamily="sans-serif-medium"
@@ -216,7 +216,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="The lightweight option"
+                            android:text="TrebleDroid-based Android 17 GSI"
                             android:textColor="@color/m3_text_secondary"
                             android:textSize="12sp" />
                     </LinearLayout>
@@ -226,6 +226,7 @@
             <!-- Flavor Option 2: MindTheGapps -->
             <LinearLayout
                 android:id="@+id/card_flavor_gapps"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -431,7 +432,7 @@
                 android:fontFamily="monospace"
                 android:padding="12dp"
                 android:scrollbars="vertical"
-                android:text="OneLineage initialized.\n"
+                android:text="OneRestless initialized.\n"
                 android:textColor="@color/m3_log_text"
                 android:textSize="11sp" />
         </LinearLayout>

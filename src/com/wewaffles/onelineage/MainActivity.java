@@ -62,13 +62,15 @@ public class MainActivity extends Activity {
     private static final String STAGE_DIR = "/data/local/tmp/lineage_stage";
     private static final String SYSTEM_RAW = STAGE_DIR + "/system.raw";
 
-    // LineageOS 24.0 (Android 17, CP2A.260605.016) EXT4 arm64 GSI. Must match the
-    // host's Android 17 build: the container borrows the host's APEX modules.
-    // No LineageOS 24 GApps GSI has been published yet, so GAPPS uses the same image.
-    private static final String URL_VANILLA = "https://github.com/ods-releases/arm64/releases/download/lineage-24.0-20261016-UNOFFICIAL-arm64-gsi/lineage-24.0-20261016-UNOFFICIAL-arm64-gsi.img.tar.gz";
+    // RestlessOS 17.0.0 (Android 17, CP2A.260605.016) arm64 ab GSI, xz-compressed raw
+    // ext4. Must match the host's Android 17 build: the container borrows the host's
+    // APEX modules, and assets/*_patched.jar are patched from exactly this build.
+    // RestlessOS has no GApps build, so GAPPS uses the same image.
+    private static final String URL_VANILLA = "https://github.com/cawilliamson/treble_restlessos/releases/download/17.0.0-202610280533/RestlessOS-arm64-ab-17.0.0-202610280533.img.xz";
     private static final String URL_GAPPS = URL_VANILLA;
-    private static final long ESTIMATED_VANILLA_BYTES = 1751441951L;
-    private static final long ESTIMATED_GAPPS_BYTES = 1751441951L;
+    // Fallback for the progress bar only, used when the server sends no Content-Length.
+    private static final long ESTIMATED_VANILLA_BYTES = 1200000000L;
+    private static final long ESTIMATED_GAPPS_BYTES = ESTIMATED_VANILLA_BYTES;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -135,10 +137,10 @@ public class MainActivity extends Activity {
 
         switch (flavor) {
             case VANILLA:
-                tvDownloadDesc.setText("Vanilla: The lightweight option");
+                tvDownloadDesc.setText("RestlessOS 17: TrebleDroid-based Android 17 GSI");
                 break;
             case GAPPS:
-                tvDownloadDesc.setText("No LineageOS 24 GApps GSI exists yet - this installs Vanilla.");
+                tvDownloadDesc.setText("RestlessOS has no GApps build - this installs the standard image.");
                 break;
         }
     }
@@ -226,18 +228,17 @@ public class MainActivity extends Activity {
             });
 
             // Check active userspace
+            // RestlessOS sets no ro.lineage.version, so detect the guest the same way
+            // returnToOneUI() does: its framework does not report a Samsung build.
             try {
-                Process pOs = Runtime.getRuntime().exec(new String[]{suBinary, "-c", "getprop ro.lineage.version"});
-                BufferedReader osReader = new BufferedReader(new InputStreamReader(pOs.getInputStream()));
-                String osVer = osReader.readLine();
-                pOs.waitFor();
+                final boolean inGuest = !"samsung".equalsIgnoreCase(android.os.Build.MANUFACTURER);
 
                 mainHandler.post(() -> {
-                    if (osVer != null && !osVer.trim().isEmpty()) {
-                        tvOsStatus.setText("Current Userspace: LineageOS " + osVer.trim());
+                    if (inGuest) {
+                        tvOsStatus.setText("Current Userspace: RestlessOS " + android.os.Build.VERSION.RELEASE);
                         tvOsStatus.setTextColor(Color.parseColor("#78D9EC"));
                         if (tvHeaderSubtitle != null) {
-                            tvHeaderSubtitle.setText("Dual Userspace Switcher • LineageOS");
+                            tvHeaderSubtitle.setText("Dual Userspace Switcher • RestlessOS");
                         }
                     } else {
                         tvOsStatus.setText("Current Userspace: Samsung One UI (Stock)");
@@ -345,13 +346,13 @@ public class MainActivity extends Activity {
                     }).waitFor();
                 } catch (Exception ignored) {}
             }
-            appendLog("OneLineage engine assets unpacked & verified.");
+            appendLog("OneRestless engine assets unpacked & verified.");
         });
     }
 
     private void downloadLineage() {
         if (!isRootGranted) {
-            appendLog("ERROR: Root privilege required to set up LineageOS!");
+            appendLog("ERROR: Root privilege required to set up RestlessOS!");
             return;
         }
         startNetworkDownload(selectedFlavor);
@@ -456,7 +457,7 @@ public class MainActivity extends Activity {
                 pbDownload.setIndeterminate(false);
                 pbDownload.setProgress(0);
                 tvDownloadProgress.setVisibility(View.VISIBLE);
-                tvDownloadProgress.setText("Connecting to official SourceForge release…");
+                tvDownloadProgress.setText("Connecting to RestlessOS GitHub release…");
                 btnDownloadLineage.setEnabled(false);
             });
 
@@ -475,7 +476,8 @@ public class MainActivity extends Activity {
                 // actual cause of "lineage_dl.7z: open failed: EACCES"). su (used below
                 // for extraction) can read the app's cache dir fine, same as
                 // extractAssets() already does for the other staged files.
-                final File targetArchive = new File(getCacheDir(), downloadUrl.contains(".tar.gz") ? "lineage_dl.img.tar.gz" : "lineage_dl.7z");
+                final File targetArchive = new File(getCacheDir(), downloadUrl.contains(".tar.gz") ? "lineage_dl.img.tar.gz"
+                        : downloadUrl.endsWith(".img.xz") ? "gsi_dl.img.xz" : "lineage_dl.7z");
 
                 appendLog("[NETWORK DOWNLOAD] Fetching " + flavor.name() + " edition directly via native HTTP engine...");
                 appendLog("URL: " + downloadUrl);
@@ -508,7 +510,7 @@ public class MainActivity extends Activity {
 
                 mainHandler.post(() -> {
                     pbDownload.setVisibility(View.GONE);
-                    tvDownloadProgress.setText("LineageOS 24.0 (" + flavor.name() + ") installed successfully!");
+                    tvDownloadProgress.setText("RestlessOS 17 installed successfully!");
                     btnDownloadLineage.setEnabled(true);
                 });
                 setLogStatus("Ready");
@@ -556,7 +558,7 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteLineage() {
         new AlertDialog.Builder(this)
-            .setTitle("Delete LineageOS Files?")
+            .setTitle("Delete RestlessOS Files?")
             .setMessage("This will cleanly unmount the container, detach loop devices, and remove system.raw to free up ~3.5GB. You can reinstall anytime.")
             .setPositiveButton("Delete", (dialog, which) -> deleteLineage())
             .setNegativeButton("Cancel", null)
@@ -614,7 +616,7 @@ public class MainActivity extends Activity {
                     appendLog("✗ system.raw could not be fully removed (a loop device is still holding it busy). Try again, or reboot and retry.");
                     setLogStatus("Error");
                 } else {
-                    appendLog("✓ LineageOS files deleted cleanly. All loop mounts detached!");
+                    appendLog("✓ RestlessOS files deleted cleanly. All loop mounts detached!");
                     setLogStatus("Idle");
                 }
                 checkImageStatus();
@@ -627,10 +629,10 @@ public class MainActivity extends Activity {
 
     private void bootLineage() {
         if (!isRootGranted) {
-            appendLog("ERROR: Root privilege required to boot LineageOS!");
+            appendLog("ERROR: Root privilege required to boot RestlessOS!");
             return;
         }
-        appendLog("\n[START] Preparing LineageOS 24.0 takeover...");
+        appendLog("\n[START] Preparing RestlessOS 17 takeover...");
         setLogStatus("Switching…");
         executor.execute(() -> {
             try {
