@@ -74,8 +74,6 @@ def stub(ret):
         meta = keep_directives(body)
         if ret == "void":
             code = ["    .locals 0", "", "    return-void"]
-        elif ret == "null":
-            code = ["    .locals 1", "", "    const/4 v0, 0x0", "", "    return-object v0"]
         else:
             code = ["    .locals 1", "", f"    const/4 v0, {ret}", "", "    return v0"]
         return code[:1] + meta + code[1:]
@@ -151,6 +149,27 @@ def screenshot_null_obj(body):
             ]
             return body[:k] + repl + body[i + 1:]
     return None
+
+def weaver_slots_from_top(body):
+    """Hand out Weaver slots from the highest one down instead of from 0 up."""
+    WC = "Lcom/android/server/locksettings/SyntheticPasswordManager;->mWeaverConfig:Landroid/hardware/weaver/WeaverConfig;"
+    SLOTS = "Landroid/hardware/weaver/WeaverConfig;->slots:I"
+    t = [l.strip() for l in body]
+    try:
+        init = t.index("move v2, v1")
+        cond = t.index("if-ge v2, v3, :cond_2")
+        step = t.index("add-int/lit8 v2, v2, 0x1")
+    except ValueError:
+        return None
+    prev = [k for k in range(cond - 1, -1, -1) if t[k]][:2]
+    if len(prev) < 2 or t[prev[1]] != f"iget-object v3, p0, {WC}" or t[prev[0]] != f"iget v3, v3, {SLOTS}":
+        return None
+    out = list(body)
+    out[step] = "    add-int/lit8 v2, v2, -0x1"
+    out[prev[1]:cond + 1] = ["    if-ltz v2, :cond_2"]
+    out[init:init + 1] = [f"    iget-object v2, p0, {WC}", f"    iget v2, v2, {SLOTS}",
+                          "    add-int/lit8 v2, v2, -0x1"]
+    return out
 
 def unknown_flag_is_false(body):
     """Container can't read Android 17 aconfig storage, so getFlagValue() is
@@ -284,23 +303,16 @@ def main(fw, svc, host=None):
          "setCeStorageProtection(ILcom/android/server/locksettings/SyntheticPasswordManager$SyntheticPassword;)V",
          stub("void"), "no CE protection")
 
-    # Weaver, Gatekeeper and keystore2 are the HOST's: the guest shares the
-    # secure element and TEE. The guest's lock-settings records live in the
-    # staged /data, so it believes every Weaver slot is free. Setting a PIN in
-    # the guest took Weaver slot 1, overwrote the host's PIN secret in it, and
-    # the One UI PIN was rejected from then on (CE storage lost). Changing or
-    # removing a credential also clears user 0's SID in Gatekeeper and its
-    # LSKF-bound keys in keystore2. So the guest never uses Weaver and never
-    # enrolls a lockscreen credential.
+    # Weaver is the HOST's secure element. The guest's lock-settings records
+    # live in the staged /data, so it believes every Weaver slot is free: a PIN
+    # set in the guest took slot 1, overwrote One UI's PIN secret in it, and the
+    # One UI PIN was rejected from then on (CE storage lost). One UI allocates
+    # from slot 0 up, so the guest allocates from the top slot down. This only
+    # separates the two while neither fills the slots; Gatekeeper, keystore2
+    # and the fingerprint sensor's templates for user 0 are still shared.
     edit(svc, "com/android/server/locksettings/SyntheticPasswordManager",
-         "getWeaverService()Landroid/hardware/weaver/IWeaver;", stub("null"),
-         "Weaver slots belong to the host")
-    edit(svc, "com/android/server/locksettings/LockSettingsService",
-         "setLockCredentialInternal(Lcom/android/internal/widget/LockscreenCredential;Lcom/android/internal/widget/LockscreenCredential;Lcom/android/internal/widget/LockDomain;IZ)Z",
-         stub("0x0"), "no lockscreen credential in the guest")
-    edit(svc, "com/android/server/locksettings/LockSettingsService",
-         "setLockCredentialWithTokenInternalLocked(Lcom/android/internal/widget/LockscreenCredential;J[BI)Z",
-         stub("0x0"), "no lockscreen credential in the guest")
+         "getNextAvailableWeaverSlot()I", weaver_slots_from_top,
+         "guest takes Weaver slots from the top down")
     edit(svc, "com/android/server/permission/access/appop/AppOpService", "createPermissionAppOpMapping()V",
          appop_skip_missing_permission, "tolerate missing permission defs")
     edit(svc, "com/android/server/pm/UserDataPreparer", "prepareUserData(Landroid/content/pm/UserInfo;I)V",
