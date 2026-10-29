@@ -2,6 +2,15 @@
 # Return to One UI / Safe State Restoration
 BACKUP_DIR="/data/local/tmp/lineage_backups"
 
+# Run in init's mount namespace. Started from the app inside the guest, su puts
+# this script in the guest's namespace, where every umount below misses: the
+# guest's /data/dalvik-cache stayed bridged over One UI's, its zygote aborted
+# ("Error changing dalvik-cache ownership") and RescueParty rebooted the phone.
+if [ "$(readlink /proc/self/ns/mnt)" != "$(readlink /proc/1/ns/mnt)" ]; then
+    NSBB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
+    exec "$NSBB" nsenter -t 1 -m -- /system/bin/sh "$0" "$@"
+fi
+
 echo "=== [1/5] Terminating Container Supervision & Zygote ==="
 pkill -9 -f "ctl.stop zygote" 2>/dev/null || true
 pkill -9 -f "kill -STOP" 2>/dev/null || true
@@ -75,9 +84,12 @@ echo "=== [3/5] Unmounting Container Overlays ==="
 umount -l /data/local/tmp/lineage_stage/rootfs/* 2>/dev/null || true
 umount -l /data/local/tmp/lineage_stage/rootfs/apex/* 2>/dev/null || true
 umount -l /data/local/tmp/lineage_stage/product_overlay 2>/dev/null || true
-while mount | grep -q "/data/local/tmp/lineage_stage/rootfs"; do
+# Match mount points only: the guest's /system/product overlayfs carries
+# "lowerdir=/data/local/tmp/lineage_stage/rootfs/..." in its options.
+i=0
+while [ "$i" -lt 100 ] && awk '$2 ~ "^/data/local/tmp/lineage_stage/rootfs" { f = 1 } END { exit !f }' /proc/mounts; do
     umount -l /data/local/tmp/lineage_stage/rootfs 2>/dev/null || true
-    sleep 0.1
+    sleep 0.1; i=$((i + 1))
 done
 BB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
 if [ -x "$BB" ]; then
