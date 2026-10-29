@@ -204,6 +204,17 @@ fi
 
 # --- STOP HOST DAEMONS & LAUNCH CONTAINER ---
 echo "=== [6/6] Launching LineageOS Takeover Daemon ==="
+# Note which watchdog device(s) the host system_server is petting before it goes
+# down with zygote below; the softdog feeder takes them over. On the A17 5G there
+# is no /dev/softdog node: softdog is /dev/watchdog1 (watchdog0 is the Exynos
+# hardware wdt, fed by watchdogd through /dev/watchdog).
+SS_PID=$(pidof system_server | awk '{print $1}')
+SOFTDOGS=""
+if [ -n "$SS_PID" ]; then
+    SOFTDOGS=$(ls -l /proc/$SS_PID/fd 2>/dev/null | grep -o '/dev/[a-z]*dog[0-9]*' | sort -u | tr '\n' ' ')
+fi
+[ -e /dev/softdog ] && case " $SOFTDOGS " in *" /dev/softdog "*) ;; *) SOFTDOGS="$SOFTDOGS /dev/softdog" ;; esac
+echo "watchdog devices held by system_server: ${SOFTDOGS:-none}"
 pkill -f "while true; do [ \"\$(getprop init.svc.zygote)\"" 2>/dev/null || true
 pkill -f "while true; do for p in \\\$(pidof audioserver cameraserver)" 2>/dev/null || true
 setprop ctl.stop zygote
@@ -224,39 +235,45 @@ kill -9 $(pidof system_server) 2>/dev/null || true
 sleep 1
 
 # --- SOFTDOG FEEDER -------------------------------------------------------
-# On Samsung devices (e.g. Galaxy A17 5G, One UI 9) the host system_server keeps
-# /dev/softdog open and pets it. Killing it above leaves the softdog armed
-# ("unexpected close"), and the kernel reboots the phone ~100 s into Lineage.
-# Take over feeding it for the rest of the session. softdog is single-open, so a
-# write fails with EBUSY while someone else holds it; the loop just retries.
+# On Samsung devices the host system_server keeps the softdog open and pets it
+# (/dev/watchdog1 on the Galaxy A17 5G, /dev/softdog elsewhere). Killing it above
+# leaves the softdog armed ("unexpected close"), and the kernel reboots the phone
+# ~100 s into the guest. Take over feeding it for the rest of the session. The
+# devices are single-open, so a write fails with EBUSY while someone else holds
+# one; the loop just retries.
 # This replaces the Watchdog-Feeder KernelSU module; vendor.hotboot.rom is still
 # set so an installed copy of that module keeps working alongside it.
 set_prop vendor.hotboot.rom 1
-if [ -e /dev/softdog ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q "softdog_feeder.sh"; then
+if [ -n "$SOFTDOGS" ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q "softdog_feeder.sh"; then
     cat > /data/local/tmp/softdog_feeder.sh <<'SDW'
 #!/system/bin/sh
+# usage: softdog_feeder.sh <watchdog device>...
 LOG=/data/local/tmp/softdog_feeder.log
-echo "$(date) feeding /dev/softdog" >> "$LOG"
-echo "<6>OneLineage: feeding /dev/softdog" > /dev/kmsg 2>/dev/null
+echo "$(date) feeding: $*" >> "$LOG"
+echo "<6>OneRestless: feeding $*" > /dev/kmsg 2>/dev/null
 fails=0
 while true; do
-    if echo 1 > /dev/softdog 2>/dev/null; then
-        fails=0
-    else
-        fails=$((fails + 1))
-        # Only log every minute of failures so the log cannot grow unbounded.
-        [ $((fails % 12)) -eq 1 ] && echo "$(date) write to /dev/softdog failed ($fails in a row)" >> "$LOG"
-    fi
+    for dev in "$@"; do
+        # Never create a regular file in /dev if the node is missing.
+        [ -c "$dev" ] || continue
+        if echo 1 > "$dev" 2>/dev/null; then
+            fails=0
+        else
+            fails=$((fails + 1))
+            # Only log every minute of failures so the log cannot grow unbounded.
+            [ $((fails % 12)) -eq 1 ] && echo "$(date) write to $dev failed ($fails in a row)" >> "$LOG"
+        fi
+    done
     sleep 5
 done
 SDW
     chmod 755 /data/local/tmp/softdog_feeder.sh
     if command -v setsid >/dev/null 2>&1; then
-        setsid /system/bin/sh /data/local/tmp/softdog_feeder.sh </dev/null >/dev/null 2>&1 &
+        setsid /system/bin/sh /data/local/tmp/softdog_feeder.sh $SOFTDOGS </dev/null >/dev/null 2>&1 &
     else
-        nohup /system/bin/sh /data/local/tmp/softdog_feeder.sh </dev/null >/dev/null 2>&1 &
+        nohup /system/bin/sh /data/local/tmp/softdog_feeder.sh $SOFTDOGS </dev/null >/dev/null 2>&1 &
     fi
-    echo "softdog feeder started (log: /data/local/tmp/softdog_feeder.log)"
+    echo "softdog feeder started on $SOFTDOGS (log: /data/local/tmp/softdog_feeder.log)"
 fi
 
 # Stop the HOST media codec stack. The guest's libmedia binds `media.codec` from

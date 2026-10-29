@@ -238,6 +238,19 @@ def main(fw, svc):
     edit(fw, "android/os/ZygoteProcess", "bootCompleted()V",
          stub("void"), "zygote socket not bound to fs path in container")
 
+    # RestlessOS carries GrapheneOS' PackageVerityExt, which throws if an updated
+    # system package has the same versionCode as the system image copy. The
+    # container scans the host's APEXes through the host apexd, and the host's
+    # decompressed compressed-APEXes (adservices, ondevicepersonalization,
+    # crashrecovery on /dev/block/dm-*) always have the same versionCode as their
+    # factory copy, so PMS dies in scanApexPackages ("Failed to scan:
+    # /dev/block/dm-74"). The only escape hatch needs a debuggable build.
+    # Not present on non-GrapheneOS-derived GSIs.
+    if glob.glob(os.path.join(svc, "smali*", "com/android/server/pm/PackageVerityExt.smali")):
+        edit(svc, "com/android/server/pm/PackageVerityExt",
+             "checkSystemPackageUpdate(Lcom/android/server/pm/pkg/AndroidPackage;)V",
+             stub("void"), "host APEX updates share the factory versionCode")
+
     edit(svc, "com/android/server/security/advancedprotection/AdvancedProtectionConfigLoader",
          "isFeatureFlagEnabled(Ljava/lang/String;)Z", unknown_flag_is_false,
          "unknown aconfig flag -> false (no flag storage in container)")
