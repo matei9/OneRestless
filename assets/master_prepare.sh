@@ -896,19 +896,15 @@ mount_payload "rkpd" "com.android.rkpd"
 mount_payload "healthfitness" "com.android.healthfitness"
 mount_payload "ondevicepersonalization" "com.android.ondevicepersonalization"
 mount_payload "configinfrastructure" "com.android.configinfrastructure"
-# Bluetooth: the guest's BT stack hands A2DP audio to the HOST's audio HAL
-# through a BluetoothAudio provider session. Samsung vendors (Galaxy A17 5G)
-# ship only vendor.samsung.hardware.bluetooth.audio.ISehBluetoothAudioProviderFactory,
-# which the GSI's AOSP module can't use ("No supported HAL version"), so
-# headphones connected but A2DP never opened a stream. There, step 9 binds the
-# host's Samsung BT module instead, which speaks the Seh HAL.
-VINTF="/vendor/etc/vintf/manifest.xml /vendor/etc/vintf/manifest/*.xml"
-if grep -qs "<name>vendor.samsung.hardware.bluetooth.audio</name>" $VINTF && \
-   ! grep -qs "<name>android.hardware.bluetooth.audio</name>" $VINTF; then
-    echo "Bluetooth: vendor has only Samsung's Seh audio HAL - using the host's BT module"
-else
-    mount_payload "bt" "com.android.bt"
-fi
+# Bluetooth stays the GSI's module. The host's Samsung module can't run here:
+# its service-bluetooth.jar needs One UI's com.android.server.pm.PersonaServiceHelper
+# (system_server dies in BluetoothManagerService.isRestrictedBtPolicy, stuck at
+# the boot animation) and its Bluetooth.apk uses ~70 more One UI-only APIs.
+# Samsung vendors (Galaxy A17 5G) only ship
+# vendor.samsung.hardware.bluetooth.audio.ISehBluetoothAudioProviderFactory,
+# which the GSI's module can't use ("No supported HAL version"), so A2DP audio
+# needs a bridge to it.
+mount_payload "bt" "com.android.bt"
 # Android 17: framework-telecom.jar / service-telecom.jar moved into the
 # telephonycore APEX. Samsung's copy doesn't ship them (One UI keeps telecom in
 # /system), so the guest must use the GSI's own telephonycore.
