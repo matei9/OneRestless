@@ -357,6 +357,43 @@ mount | grep -q "$ROOTFS/data/apex " || $BB mount --bind /data/apex "$ROOTFS/dat
 mkdir -p "$ROOTFS/data/media"
 mount | grep -q "$ROOTFS/data/media " || $BB mount --bind /data/media "$ROOTFS/data/media" 2>/dev/null || true
 
+echo "=== 5d2. Pinning root-relevant guest packages to their host uids ==="
+# KernelSU lives in the shared kernel and identifies its manager and every su
+# grant by uid. The guest PMS hands out its own uids (manager: host 10323,
+# guest 10144), so the guest manager is not recognised and grants made on
+# either side point at the wrong app. Rewrite the guest packages.xml (system_server
+# is not running yet) so the manager and every package on the host allowlist
+# keep their host uid. fix_app_dirs.sh re-chowns their data dirs after boot.
+GPKG="$STAGE/data/system/packages.xml"
+if [ -f "$GPKG" ] && [ -f /data/system/packages.list ] && command -v abx2xml >/dev/null; then
+    PKGS="me.weishu.kernelsu $($BB strings -n 4 /data/adb/ksu/.allowlist 2>/dev/null | grep -E '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$')"
+    abx2xml "$GPKG" "$STAGE/packages.xml.txt" 2>/dev/null
+    changed=0
+    for pkg in $(echo $PKGS | tr ' ' '\n' | sort -u); do
+        huid=$(awk -v p="$pkg" '$1 == p { print $2 }' /data/system/packages.list)
+        line=$(grep "<package name=\"$pkg\" " "$STAGE/packages.xml.txt")
+        guid=$(echo "$line" | sed -n 's/.* userId="\([0-9]*\)".*/\1/p')
+        [ -n "$huid" ] && [ -n "$guid" ] && [ "$huid" != "$guid" ] || continue
+        # Packages in a shared uid, and host uids already taken in the guest, are left alone.
+        echo "$line" | grep -q 'sharedUserId=' && continue
+        if grep -q "userId=\"$huid\"" "$STAGE/packages.xml.txt"; then
+            echo "  $pkg: host uid $huid is taken in the guest, keeping $guid"
+            continue
+        fi
+        sed -i "/<package name=\"$pkg\" /s/ userId=\"$guid\"/ userId=\"$huid\"/" "$STAGE/packages.xml.txt"
+        echo "  $pkg: guest uid $guid -> $huid"
+        changed=$((changed + 1))
+    done
+    if [ "$changed" -gt 0 ] && xml2abx "$STAGE/packages.xml.txt" "$GPKG.new" 2>/dev/null; then
+        mv -f "$GPKG.new" "$GPKG"
+        chown 1000:1000 "$GPKG"
+        chmod 660 "$GPKG"
+        # PMS prefers a backup file over packages.xml; drop it so the edit sticks.
+        rm -f "$STAGE/data/system/packages-backup.xml"
+    fi
+    rm -f "$STAGE/packages.xml.txt" "$GPKG.new"
+fi
+
 echo "=== 5e. Writing per-package data-dir helper ==="
 # Apps installed before the /data bridge existed have no CE/DE data dirs in the
 # guest tree, and the guest zygote refuses to fork them:
