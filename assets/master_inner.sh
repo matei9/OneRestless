@@ -15,6 +15,14 @@ if ! $BB pivot_root . postinstall; then
 fi
 $BB mount -t proc proc /proc
 
+# vold mounts the FUSE internal storage at /mnt/user/0/emulated (and the
+# MediaProvider pass-through view under /mnt/pass_through) in this namespace.
+# zygote, system_server and apps run in their own namespaces and only get those
+# mounts by propagation, as with init's shared /mnt on a real boot. The
+# make-rprivate above cut /mnt off; share it again inside the container (a new
+# peer group, so nothing propagates back to the host).
+$BB mount --make-rshared /mnt
+
 export PATH=/system/bin:/system/xbin
 
 echo "[Pivoted Root] Setting up /data_mirror and /data/data mounts for Zygote isolation..."
