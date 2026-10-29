@@ -172,6 +172,28 @@ set_prop audio.deep_buffer.media false
 set_prop audio.offload.video false
 set_prop vendor.audio.offload.track.enable false
 
+# --- BACKGROUND DEXOPT ----------------------------------------------------
+# The guest's artd runs background dexopt as soon as the phone is charging, and
+# with the host's speed-profile filter ART upgrades every shared system package
+# to full "speed": two dex2oat processes at ~400% CPU on a 4 GB Galaxy A17 5G,
+# 68 C on the big cores and RAM full. RestlessOS (GrapheneOS code) compiles
+# with "speed" no matter what pm.dexopt.bg-dexopt says, so turn the background
+# job off for the guest session and keep any other dexopt verify-only and
+# single-threaded (apps still JIT hot code: dalvik.vm.usejit is the host's,
+# true). The guest shares the host's property area, so save One UI's values;
+# return_to_oneui.sh restores them.
+DEXOPT_PROPS="pm.dexopt.bg-dexopt pm.dexopt.shared dalvik.vm.dex2oat-threads dalvik.vm.background-dex2oat-threads pm.dexopt.disable_bg_dexopt"
+if [ ! -f "$STAGE/host_dexopt.props" ]; then
+    for p in $DEXOPT_PROPS; do
+        echo "$p=$(getprop $p)"
+    done > "$STAGE/host_dexopt.props"
+fi
+set_prop pm.dexopt.bg-dexopt verify
+set_prop pm.dexopt.shared verify
+set_prop dalvik.vm.dex2oat-threads 1
+set_prop dalvik.vm.background-dex2oat-threads 1
+set_prop pm.dexopt.disable_bg_dexopt true
+
 # --- NETWORK BPF FIREWALL & DNS BYPASS ---
 echo "=== [3/6] Configuring Network BPF Filters ==="
 bpftool map update pinned /sys/fs/bpf/netd_shared/map_netd_configuration_map key hex 00 00 00 00 value hex 00 00 00 00 2>/dev/null || true
@@ -274,6 +296,33 @@ SDW
         nohup /system/bin/sh /data/local/tmp/softdog_feeder.sh $SOFTDOGS </dev/null >/dev/null 2>&1 &
     fi
     echo "softdog feeder started on $SOFTDOGS (log: /data/local/tmp/softdog_feeder.log)"
+fi
+
+# --- PLACEHOLDER SAMSUNG SERVICES ----------------------------------------
+# Host daemons still look up services One UI's system_server used to publish,
+# and a missing service blocks each lookup for the full 5 s getService()
+# timeout. Samsung's audioserver asks for CustomFrequencyManagerService (DVFS
+# boosts) on every AudioTrack start and on its mixer thread, so every sound in
+# the guest started ~5 s late; cameraserver asks for Knox' edmnativehelper on
+# every camera open. svcstub.dex registers placeholders under those names
+# (edmnativehelper answers 1 = "allowed", which is also what its client assumes
+# when the service is missing).
+# It also keeps the host vold's binder: the guest's vold (master_inner.sh)
+# takes over the "vold" name, and return_to_oneui.sh has svcstub put the host's
+# back (vold can't be restarted: init reboots with "reboot,vold-failed").
+# return_to_oneui.sh stops it before One UI's system_server comes back.
+if [ -f "$STAGE/svcstub.dex" ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q "onelineage.stub.ServiceStub"; then
+    chmod 644 "$STAGE/svcstub.dex"
+    CLASSPATH="$STAGE/svcstub.dex" setsid /system/bin/app_process /system/bin \
+        com.wewaffles.onelineage.stub.ServiceStub keep:vold keep:android.system.vold.IVold/default \
+        CustomFrequencyManagerService edmnativehelper:1 \
+        </dev/null >/data/local/tmp/svcstub.log 2>&1 &
+    # The vold binder must be saved before the guest's vold replaces it.
+    i=0
+    while [ "$i" -lt 30 ] && ! grep -q "registered edmnativehelper" /data/local/tmp/svcstub.log 2>/dev/null; do
+        sleep 0.5; i=$((i + 1))
+    done
+    echo "placeholder services: $(tr '\n' ' ' < /data/local/tmp/svcstub.log 2>/dev/null)"
 fi
 
 # Stop the HOST media codec stack. The guest's libmedia binds `media.codec` from

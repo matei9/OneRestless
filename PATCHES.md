@@ -102,3 +102,20 @@ are built locally into `../google-gsi-overlay/` and passed to `build_apk.sh` via
 `EXTRA_ASSETS_DIR`. They are never committed. `mount_payload` now accepts Google's
 `com.google.android.<name>.apex` naming (compressed or not), and the payload cache
 is cleared whenever `system.raw` changes.
+
+## Galaxy A17 5G / One UI 9 / RestlessOS additions
+
+| Where | Change | Why |
+|---|---|---|
+| services `PackageVerityExt.checkSystemPackageUpdate` | no-op | RestlessOS (GrapheneOS code) rejects an updated system package with the same versionCode; the host's decompressed APEXes always match their factory copy, so PMS died in `scanApexPackages` |
+| services `StorageManagerService.commitChanges` / `abortChanges` / `needsCheckpoint` | no-op / no-op / `false` | the userdata checkpoint is the host's; the guest's commit failed at boot-complete, AMS requested a reboot, and with `lowLevelReboot` stubbed ShutdownThread powered the phone off (`reboot,lpm`) |
+| framework `ICameraService`, `ICameraDeviceUser`, `ISensorPrivacyManager` | Proxies send the host's transaction codes, Stubs translate host codes at the top of `onTransact` | Samsung inserts methods mid-interface (`ICameraDeviceUser.setParameters` at 13, `ICameraService.notifyDeviceStateChangeSync` at 23), so guest calls to the host cameraserver hit the wrong method (`getCaptureResultMetadataQueue` -> `ParcelFormatException: Not enough data`) |
+| `svcstub/` (`svcstub.dex`) | placeholder `CustomFrequencyManagerService` and `edmnativehelper` (answers int32 1) while the guest runs | host audioserver/cameraserver look these One UI services up on every sound / camera open and each lookup blocked 5 s |
+
+The host alignment needs One UI's own framework.jar:
+```sh
+adb shell su -c "cp /system/framework/framework.jar /data/local/tmp/host_framework.jar"
+adb pull /data/local/tmp/host_framework.jar && java -jar apktool.jar d -f --no-res -o hfw host_framework.jar
+python3 tools/patch_smali.py fw svc hfw
+python3 tools/graft_dex.py framework.jar fw_built.jar assets/framework_patched.jar classes2.dex classes3.dex
+```

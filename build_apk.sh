@@ -47,10 +47,18 @@ echo "build_info: v$VERSION_NAME ($VERSION_CODE) $BUILD_TIME $GIT_REV"
 # Optional local overlay (e.g. jars patched from a GSI whose license forbids
 # redistribution): files in EXTRA_ASSETS_DIR replace same-named assets/ files
 # in this build only, and never enter git.
-ASSETS_SRC=assets
+ASSETS_SRC="$BUILD_DIR/assets"
+mkdir -p "$ASSETS_SRC" && cp -r assets/. "$ASSETS_SRC"/
+
+echo "=== 1c. Building svcstub.dex (placeholder binder services) ==="
+mkdir -p "$BUILD_DIR/svcstub/classes" "$BUILD_DIR/svcstub/dex"
+javac --release 8 -cp "$PLATFORM_JAR" -d "$BUILD_DIR/svcstub/classes" \
+    svcstub/src/com/wewaffles/onelineage/stub/ServiceStub.java
+$D8 --lib "$PLATFORM_JAR" --output "$BUILD_DIR/svcstub/dex" \
+    "$BUILD_DIR/svcstub/classes/com/wewaffles/onelineage/stub"/*.class
+cp "$BUILD_DIR/svcstub/dex/classes.dex" "$ASSETS_SRC/svcstub.dex"
+
 if [ -n "$EXTRA_ASSETS_DIR" ]; then
-    ASSETS_SRC="$BUILD_DIR/assets"
-    mkdir -p "$ASSETS_SRC" && cp -r assets/. "$ASSETS_SRC"/
     for f in "$EXTRA_ASSETS_DIR"/*; do
         case "$f" in *.txt|*.md) continue;; esac
         cp -f "$f" "$ASSETS_SRC"/ && echo "overlay asset: $(basename "$f")"

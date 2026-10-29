@@ -611,17 +611,26 @@ cat > "$STAGE/data/local/tmp/app_storage_loop.sh" <<'APPLOOP'
 # boot-aware system apps like MediaProvider, DownloadProvider must have
 # their dirs the moment PMS registers them, which is well before
 # sys.boot_completed) and backs off once boot completes.
+# sys.boot_completed can't tell us when the guest has booted: the container shares
+# the host's property area, where One UI already set it to 1, so the tight phase
+# used to be skipped entirely and MediaProvider/MTP (android.process.media)
+# crash-looped on missing data dirs until the first 10 s sweep. Stay tight for the
+# first 5 minutes of the session instead, which covers the guest's whole boot.
 last=""
 booted=0
+start=$(date +%s)
 while true; do
     if [ "$booted" = 0 ]; then
         sleep 1
-        case "$(getprop sys.boot_completed)" in 1) booted=1 ;; esac
+        [ $(( $(date +%s) - start )) -ge 300 ] && booted=1
     else
         sleep 10
-        netout=$(/system/bin/sh /data/local/tmp/net_fix.sh 2>/dev/null)
-        [ -n "$netout" ] && echo "$(date) $netout" >> /data/app_storage.log
     fi
+    # Routing has to be repaired from the start too, or wifi/mobile data reads
+    # "connected, no internet" for the whole boot phase. Idempotent, quiet
+    # unless it changed something.
+    netout=$(/system/bin/sh /data/local/tmp/net_fix.sh 2>/dev/null)
+    [ -n "$netout" ] && echo "$(date) $netout" >> /data/app_storage.log
     cur=$(md5sum /data/system/packages.list 2>/dev/null | cut -d' ' -f1)
     out=$(/system/bin/sh /data/local/tmp/ensure_app_storage.sh 2>/dev/null)
     if [ "$booted" = 1 ] && [ -n "$last" ] && { [ "$cur" != "$last" ] || [ -n "$out" ]; }; then

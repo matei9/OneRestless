@@ -6,8 +6,11 @@ The original project shipped binary-patched jars for LineageOS 23.2 with no
 source. This script reproduces every one of those patches *by class and method
 name* so they can be re-applied to newer GSIs (LineageOS 24 / Android 17).
 
-usage: patch_smali.py <framework_smali_root> <services_smali_root>
+usage: patch_smali.py <framework_smali_root> <services_smali_root> [<host_framework_smali_root>]
 Each root is an apktool output dir containing smali/, smali_classes2/, ...
+With the host's (One UI's) framework.jar decompiled as the third root, the
+binder interfaces shared with Samsung's native daemons are renumbered to the
+host's transaction codes (see HOST_ALIGNED_INTERFACES).
 Prints which dex dir each patched class lives in; exits non-zero on any miss.
 """
 import glob, os, re, sys
@@ -157,7 +160,91 @@ def unknown_flag_is_false(body):
                 return body[:j] + body[j + 1:]
     return None
 
-def main(fw, svc):
+
+# ---- align binder transaction codes with the host -----------------------
+# The guest's apps talk straight to the HOST's native daemons (cameraserver,
+# audioserver, ...), and those call back into the guest's system_server. Samsung
+# inserts methods into the middle of some AIDL interfaces, which shifts every
+# later transaction code, so the guest ends up calling (or serving) the wrong
+# method: e.g. ICameraDeviceUser.getCaptureResultMetadataQueue (23) lands on
+# Samsung's finalizeOutputConfigurations and camera open dies with
+# "ParcelFormatException: Not enough data".
+# Fix: guest Proxies send the host's codes, and guest Stubs translate host codes
+# back to their own methods at the top of onTransact. Every guest process loads
+# the same patched framework.jar, so guest<->guest calls stay consistent.
+HOST_ALIGNED_INTERFACES = [
+    "android/hardware/ICameraService",              # guest -> host cameraserver
+    "android/hardware/camera2/ICameraDeviceUser",   # guest -> host cameraserver
+    "android/hardware/ISensorPrivacyManager",       # host cameraserver -> guest
+]
+INVALID_CODE = "0xfffffe"  # inside FIRST..LAST_CALL_TRANSACTION, never a method
+
+def transaction_table(root, iface):
+    hits = glob.glob(os.path.join(root, "smali*", iface + "$Stub.smali"))
+    if len(hits) != 1:
+        return None
+    return {m.group(1): int(m.group(2), 16) for m in re.finditer(
+        r"\.field [^\n]*?TRANSACTION_(\w+):I = (0x[0-9a-f]+)", open(hits[0], encoding="utf-8").read())}
+
+def align_to_host(fw, host, iface):
+    g, h = transaction_table(fw, iface), transaction_table(host, iface)
+    if g is None or h is None:
+        FAIL.append(f"{iface}: Stub not found (guest={g is not None}, host={h is not None})"); return
+    missing = sorted(set(g) - set(h))
+    if missing:
+        FAIL.append(f"{iface}: guest-only methods {missing}, can't adopt host numbering"); return
+    if all(g[n] == h[n] for n in g) and len(h) == len(g):
+        print(f"  --  {iface}  [already matches host]"); return
+
+    # Proxy: rewrite the code constant that feeds each IBinder.transact().
+    path = find_class(fw, iface + "$Stub$Proxy")
+    if not path: return
+    lines = open(path, encoding="utf-8").read().split("\n")
+    i, method, done = 0, None, 0
+    while i < len(lines):
+        l = lines[i]
+        if l.startswith(".method"):
+            method = l.split(" ")[-1].split("(")[0]
+        m = re.match(r"\s*invoke-interface(/range)? \{([^}]*)\}, Landroid/os/IBinder;->transact\(", l)
+        if m and method in g and g[method] != h[method]:
+            regs = m.group(2)
+            if m.group(1):
+                a, b = [r.strip() for r in regs.split("..")]
+                code_reg = a[0] + str(int(a[1:]) + 1)
+            else:
+                code_reg = regs.split(",")[1].strip()
+            for j in range(i - 1, -1, -1):
+                c = re.match(r"(\s*)const(/4|/16)? " + re.escape(code_reg) + r", (-?0x[0-9a-f]+)$", lines[j])
+                if c:
+                    if int(c.group(3), 16) != g[method]:
+                        FAIL.append(f"{iface}.Proxy.{method}: code const {c.group(3)} != {g[method]}"); break
+                    lines[j] = f"{c.group(1)}const/16 {code_reg}, {hex(h[method])}"
+                    done += 1; break
+                if lines[j].startswith(".method"):
+                    FAIL.append(f"{iface}.Proxy.{method}: code const not found"); break
+        i += 1
+    open(path, "w", encoding="utf-8").write("\n".join(lines))
+    TOUCHED.add(os.path.relpath(path, fw).split(os.sep)[0] + "  " + fw)
+
+    # Stub: translate host codes to guest codes before the guest's own dispatch.
+    by_host = {v: n for n, v in h.items()}
+    remap = {hc: (hex(g[n]) if n in g else INVALID_CODE) for hc, n in by_host.items()
+             if n not in g or g[n] != hc}
+    def prologue(body):
+        at = next(k for k, l in enumerate(body) if l.strip().startswith(".locals"))
+        code = ["", "    sparse-switch p1, :ol_host_codes", "    goto :ol_host_codes_done"]
+        for k, (hc, gc) in enumerate(sorted(remap.items())):
+            code += [f"    :ol_host_{k}", f"    const p1, {gc}", "    goto :ol_host_codes_done"]
+        code += ["    :ol_host_codes_done"]
+        table = ["", "    :ol_host_codes", "    .sparse-switch"]
+        table += [f"        {hex(hc)} -> :ol_host_{k}" for k, (hc, gc) in enumerate(sorted(remap.items()))]
+        table += ["    .end sparse-switch"]
+        return body[:at + 1] + code + body[at + 1:] + table
+    edit(fw, iface + "$Stub", "onTransact(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", prologue,
+         f"accept host codes ({len(remap)} remapped)")
+    print(f"  ok  {iface}$Stub$Proxy  [{done} calls renumbered to host codes]")
+
+def main(fw, svc, host=None):
     print("framework.jar")
     for sig in ["isUserUnlocked()Z", "isUserUnlocked(I)Z",
                 "isUserUnlocked(Landroid/os/UserHandle;)Z", "isUserUnlockingOrUnlocked(I)Z"]:
@@ -238,6 +325,19 @@ def main(fw, svc):
     edit(fw, "android/os/ZygoteProcess", "bootCompleted()V",
          stub("void"), "zygote socket not bound to fs path in container")
 
+    # The userdata checkpoint belongs to the host. AMS.finishBooting calls
+    # SMS.commitChanges() -> vold; in the container that lands on the guest's
+    # vold, fails, and AMS asks for a reboot ("Checkpoint commit failed"). With
+    # lowLevelReboot stubbed, ShutdownThread falls through to lowLevelShutdown and
+    # powers the phone off (Samsung: "reboot,lpm" when charging). abortChanges is
+    # vold's "roll back and reboot". The guest must never touch either.
+    edit(svc, "com/android/server/StorageManagerService", "commitChanges()V",
+         stub("void"), "host owns the userdata checkpoint")
+    edit(svc, "com/android/server/StorageManagerService", "abortChanges(Ljava/lang/String;Z)V",
+         stub("void"), "host owns the userdata checkpoint")
+    edit(svc, "com/android/server/StorageManagerService", "needsCheckpoint()Z",
+         stub("0x0"), "host owns the userdata checkpoint")
+
     # RestlessOS carries GrapheneOS' PackageVerityExt, which throws if an updated
     # system package has the same versionCode as the system image copy. The
     # container scans the host's APEXes through the host apexd, and the host's
@@ -255,9 +355,14 @@ def main(fw, svc):
          "isFeatureFlagEnabled(Ljava/lang/String;)Z", unknown_flag_is_false,
          "unknown aconfig flag -> false (no flag storage in container)")
 
+    if host:
+        print("host-aligned binder interfaces")
+        for iface in HOST_ALIGNED_INTERFACES:
+            align_to_host(fw, host, iface)
+
     print("\nmodified dex dirs:"); [print("  " + t) for t in sorted(TOUCHED)]
     if FAIL:
         print("\nFAILED:"); [print("  " + f) for f in FAIL]; sys.exit(1)
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:4])
