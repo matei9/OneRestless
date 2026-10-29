@@ -68,6 +68,20 @@ setprop ctl.start cameraserver
 for svc in media media.extractor media.metrics wificond; do
     setprop ctl.start $svc 2>/dev/null || true
 done
+# Hand /dev/softdog back to One UI. Keep feeding it until the host system_server
+# is back (it re-opens the softdog itself), then stop the feeder so the two do
+# not race for the single-open device.
+setprop vendor.hotboot.rom 0 2>/dev/null || true
+if ps -ef 2>/dev/null | grep -v grep | grep -q "softdog_feeder.sh"; then
+    nohup /system/bin/sh -c '
+        i=0
+        while [ "$i" -lt 90 ] && ! pidof system_server >/dev/null 2>&1; do
+            sleep 1; i=$((i + 1))
+        done
+        sleep 10
+        pkill -9 -f "softdog_[f]eeder.sh"
+    ' </dev/null >/dev/null 2>&1 &
+fi
 am force-stop com.sec.android.app.launcher 2>/dev/null || true
 am start -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/null || true
 

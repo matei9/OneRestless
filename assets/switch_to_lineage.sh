@@ -223,6 +223,42 @@ kill -9 $(pidof zygote64) 2>/dev/null || true
 kill -9 $(pidof system_server) 2>/dev/null || true
 sleep 1
 
+# --- SOFTDOG FEEDER -------------------------------------------------------
+# On Samsung devices (e.g. Galaxy A17 5G, One UI 9) the host system_server keeps
+# /dev/softdog open and pets it. Killing it above leaves the softdog armed
+# ("unexpected close"), and the kernel reboots the phone ~100 s into Lineage.
+# Take over feeding it for the rest of the session. softdog is single-open, so a
+# write fails with EBUSY while someone else holds it; the loop just retries.
+# This replaces the Watchdog-Feeder KernelSU module; vendor.hotboot.rom is still
+# set so an installed copy of that module keeps working alongside it.
+set_prop vendor.hotboot.rom 1
+if [ -e /dev/softdog ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q "softdog_feeder.sh"; then
+    cat > /data/local/tmp/softdog_feeder.sh <<'SDW'
+#!/system/bin/sh
+LOG=/data/local/tmp/softdog_feeder.log
+echo "$(date) feeding /dev/softdog" >> "$LOG"
+echo "<6>OneLineage: feeding /dev/softdog" > /dev/kmsg 2>/dev/null
+fails=0
+while true; do
+    if echo 1 > /dev/softdog 2>/dev/null; then
+        fails=0
+    else
+        fails=$((fails + 1))
+        # Only log every minute of failures so the log cannot grow unbounded.
+        [ $((fails % 12)) -eq 1 ] && echo "$(date) write to /dev/softdog failed ($fails in a row)" >> "$LOG"
+    fi
+    sleep 5
+done
+SDW
+    chmod 755 /data/local/tmp/softdog_feeder.sh
+    if command -v setsid >/dev/null 2>&1; then
+        setsid /system/bin/sh /data/local/tmp/softdog_feeder.sh </dev/null >/dev/null 2>&1 &
+    else
+        nohup /system/bin/sh /data/local/tmp/softdog_feeder.sh </dev/null >/dev/null 2>&1 &
+    fi
+    echo "softdog feeder started (log: /data/local/tmp/softdog_feeder.log)"
+fi
+
 # Stop the HOST media codec stack. The guest's libmedia binds `media.codec` from
 # the shared servicemanager, i.e. Samsung's mediaserver - whose IMediaCodecList
 # AIDL hash differs from the GSI's. The reply parcel is then parsed as garbage
