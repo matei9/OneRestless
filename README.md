@@ -7,7 +7,20 @@
 > This fork targets the **RestlessOS (Android 17) GSI** on a bootloader-locked **Galaxy A17 5G** running One UI 9.
 > It builds on Dylan's One UI 9 / RestlessOS port (`restlessos` branch). The patched framework jars must match the
 > staged GSI build; see [PATCHES.md](PATCHES.md) for how to regenerate them.
-> The host's `/dev/softdog` is fed while the guest runs, so the phone no longer reboots ~100 s after switching.
+>
+> **Status: basically usable.** All the main functions work: boot, display (with an A17 overlay for the cutout,
+> rounded corners, 90 Hz and brightness), touch, audio, camera, Wi-Fi, mobile data, internal storage, root
+> (KernelSU) inside RestlessOS, PIN and fingerprint in RestlessOS, and switching back to One UI.
+>
+> **Tested on:** Galaxy A17 5G (SM-A176B, bootloader locked, rooted with KernelSU), One UI 9
+> (`A176BXXU8DZJ5`), with the RestlessOS GSI
+> [`RestlessOS-arm64-ab-17.0.0-202610280533`](https://github.com/cawilliamson/treble_restlessos/releases/tag/17.0.0-202610280533).
+>
+> **⚠️ Do not set any screen lock in One UI** (no PIN, pattern, password or fingerprint). RestlessOS shares the phone's
+> security hardware with One UI (Weaver, Gatekeeper, keystore and the fingerprint sensor). A screen lock set in
+> RestlessOS can overwrite One UI's, and One UI will then reject its own PIN. Its internal storage can't be decrypted
+> again, and the only way back is a factory reset. RestlessOS also deletes fingerprints it didn't enroll itself.
+> Set your PIN and fingerprint **only in RestlessOS**.
 
 Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on a rooted Samsung phone, with no reflashing and no second partition. OneLineage stages the GSI under `/data/local/tmp`, pivots into it as a container with its own zygote and system_server, and can hand the screen back to One UI.
 
@@ -53,16 +66,9 @@ Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on
 11. **SMS.** `ims_watchdog.sh` keeps One UI's `imsd` running and `switch_to_lineage.sh` waits for voice registration before pivoting.
 12. **Boot diagnostics.** Each boot writes `/data/boot_failures.log`.
 
-## Known issues
-- Returning to One UI may still need a manual reboot.
-- The guest binds the host's `media.codec`, whose AIDL hash differs from the GSI's, which can cause high CPU during codec enumeration.
-- No IMS stack in the guest, so **voice calls don't work** (data and SMS depend on One UI's `imsd`).
-- Developer options crash (the guest registers no `adb` service).
-- DTMF tones glitch, and deep-buffer audio hangs, so it stays disabled.
-- Never kill the host `netd` while Lineage is running.
-
 ## Building
 Edit the paths at the top of `build_apk.sh` (JDK 17, Android SDK build-tools 34, android-34 platform), provide your own signing keystore, then run `./build_apk.sh`.
 
 ## Credits
-LineageOS GSI builds by MisterZtr (SourceForge). LineageOS and Android are trademarks of their respective owners. Not affiliated with Samsung, Google or LineageOS.
+LineageOS GSI builds by MisterZtr (SourceForge). RestlessOS Treble GSI builds by
+[cawilliamson](https://github.com/cawilliamson) ([treble_restlessos](https://github.com/cawilliamson/treble_restlessos)). LineageOS and Android are trademarks of their respective owners. Not affiliated with Samsung, Google or LineageOS.
