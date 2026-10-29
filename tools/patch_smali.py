@@ -74,6 +74,8 @@ def stub(ret):
         meta = keep_directives(body)
         if ret == "void":
             code = ["    .locals 0", "", "    return-void"]
+        elif ret == "null":
+            code = ["    .locals 1", "", "    const/4 v0, 0x0", "", "    return-object v0"]
         else:
             code = ["    .locals 1", "", f"    const/4 v0, {ret}", "", "    return v0"]
         return code[:1] + meta + code[1:]
@@ -281,6 +283,24 @@ def main(fw, svc, host=None):
     edit(svc, "com/android/server/locksettings/LockSettingsService",
          "setCeStorageProtection(ILcom/android/server/locksettings/SyntheticPasswordManager$SyntheticPassword;)V",
          stub("void"), "no CE protection")
+
+    # Weaver, Gatekeeper and keystore2 are the HOST's: the guest shares the
+    # secure element and TEE. The guest's lock-settings records live in the
+    # staged /data, so it believes every Weaver slot is free. Setting a PIN in
+    # the guest took Weaver slot 1, overwrote the host's PIN secret in it, and
+    # the One UI PIN was rejected from then on (CE storage lost). Changing or
+    # removing a credential also clears user 0's SID in Gatekeeper and its
+    # LSKF-bound keys in keystore2. So the guest never uses Weaver and never
+    # enrolls a lockscreen credential.
+    edit(svc, "com/android/server/locksettings/SyntheticPasswordManager",
+         "getWeaverService()Landroid/hardware/weaver/IWeaver;", stub("null"),
+         "Weaver slots belong to the host")
+    edit(svc, "com/android/server/locksettings/LockSettingsService",
+         "setLockCredentialInternal(Lcom/android/internal/widget/LockscreenCredential;Lcom/android/internal/widget/LockscreenCredential;Lcom/android/internal/widget/LockDomain;IZ)Z",
+         stub("0x0"), "no lockscreen credential in the guest")
+    edit(svc, "com/android/server/locksettings/LockSettingsService",
+         "setLockCredentialWithTokenInternalLocked(Lcom/android/internal/widget/LockscreenCredential;J[BI)Z",
+         stub("0x0"), "no lockscreen credential in the guest")
     edit(svc, "com/android/server/permission/access/appop/AppOpService", "createPermissionAppOpMapping()V",
          appop_skip_missing_permission, "tolerate missing permission defs")
     edit(svc, "com/android/server/pm/UserDataPreparer", "prepareUserData(Landroid/content/pm/UserInfo;I)V",
