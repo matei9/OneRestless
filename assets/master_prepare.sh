@@ -375,7 +375,20 @@ mount | grep -q "$ROOTFS/data " || $BB mount --bind "$STAGE/data" "$ROOTFS/data"
 mount | grep -q "$ROOTFS/data/adb " || $BB mount --bind /data/adb "$ROOTFS/data/adb"
 mount | grep -q "$ROOTFS/data/apex " || $BB mount --bind /data/apex "$ROOTFS/data/apex"
 mkdir -p "$ROOTFS/data/media"
-mount | grep -q "$ROOTFS/data/media " || $BB mount --bind /data/media "$ROOTFS/data/media" 2>/dev/null || true
+# Internal storage (/data/media/0) is encrypted with user 0's CE key, which only
+# exists once One UI has been unlocked since boot. Without it the guest's vold
+# fails with "Required key not available" and the guest has no internal storage
+# at all, so fall back to a guest-only media dir until One UI is unlocked.
+MEDIA_SRC=/data/media
+if [ "$(getprop sys.user.0.ce_available)" != "true" ]; then
+    MEDIA_SRC="$STAGE/media"
+    mkdir -p "$MEDIA_SRC/0" "$MEDIA_SRC/obb"
+    chown 1023:1023 "$MEDIA_SRC" "$MEDIA_SRC/0" "$MEDIA_SRC/obb"
+    chmod 770 "$MEDIA_SRC" "$MEDIA_SRC/0" "$MEDIA_SRC/obb"
+    echo "!!! One UI has not been unlocked since boot: guest internal storage is $MEDIA_SRC, not /data/media"
+fi
+mount | grep -q "$ROOTFS/data/media " && $BB umount -l "$ROOTFS/data/media" 2>/dev/null
+$BB mount --bind "$MEDIA_SRC" "$ROOTFS/data/media" 2>/dev/null || true
 
 echo "=== 5d2. Pinning root-relevant guest packages to their host uids ==="
 # KernelSU lives in the shared kernel and identifies its manager and every su
