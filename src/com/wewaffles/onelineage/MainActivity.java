@@ -1123,6 +1123,8 @@ public class MainActivity extends Activity {
             appendLog(getString(R.string.log_root_required_boot));
             return;
         }
+        // A second tap would start a second guest; switch_to_lineage.sh also refuses.
+        btnBootLineage.setEnabled(false);
         appendLog(getString(R.string.log_boot_start));
         setLogStatus(getString(R.string.status_switching));
         executor.execute(() -> {
@@ -1151,6 +1153,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 appendLog(getString(R.string.log_launch_failed, e.getMessage()));
                 setLogStatus(getString(R.string.status_error));
+                mainHandler.post(() -> btnBootLineage.setEnabled(true));
             }
         });
     }

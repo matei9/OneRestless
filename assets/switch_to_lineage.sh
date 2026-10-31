@@ -10,6 +10,17 @@ export BB
 export RP
 export STAGE
 
+# Two takeovers at once start two guests that fight over the display, input and
+# /data: dead touch, hung system, and it only clears with a reboot. The lock lives
+# in /dev so a reboot drops it; return_to_oneui.sh removes it otherwise.
+LOCK=/dev/.onelineage_takeover
+if mkdir "$LOCK" 2>/dev/null; then
+    trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+elif [ -d "$LOCK" ]; then
+    echo "=== A takeover is already running, ignoring this one ==="
+    exit 0
+fi
+
 set_prop() {
     if [ -n "$RP" ] && [ -x "$RP" ]; then
         "$RP" "$1" "$2" 2>/dev/null || true
@@ -512,4 +523,5 @@ while true; do
 done
 " </dev/null >/data/local/tmp/ui_activator.log 2>&1 &
 
+trap - EXIT
 echo "=== TAKEOVER LAUNCHED SUCCESSFULLY ==="

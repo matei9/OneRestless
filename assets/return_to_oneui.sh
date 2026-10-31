@@ -198,4 +198,5 @@ am start -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/nu
 # switch_to_lineage.sh drops SELinux to permissive for the takeover; restore it.
 setenforce 1 2>/dev/null || true
 echo "SELinux mode: $(getenforce 2>/dev/null || echo unknown)"
+rmdir /dev/.onelineage_takeover 2>/dev/null
 echo "One UI restored successfully."
