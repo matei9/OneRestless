@@ -16,7 +16,7 @@
     <string name="status_userspace_lineage">Current Userspace: RestlessOS %1$s</string>
     <string name="status_userspace_oneui">Current Userspace: Samsung One UI (Stock)</string>
     <string name="status_userspace_oneui_short">Current Userspace: Samsung One UI</string>
-    <string name="status_image_checking">LineageOS Image: Checking…</string>
+    <string name="status_image_checking">RestlessOS Image: Checking…</string>
     <string name="status_image_installed">Image: Installed &amp; Ready (%1$s)</string>
     <string name="status_image_missing">Image: Not Installed (Missing system.raw)</string>
     <string name="status_image_error">Image Check Error: %1$s</string>
@@ -29,7 +29,7 @@
     <string name="language_english">English</string>
     <string name="language_portuguese_brazil">Português (Brasil)</string>
     <string name="theme_title">Color theme</string>
-    <string name="theme_option_lineage">Lineage Blue</string>
+    <string name="theme_option_lineage">RestlessOS Blue</string>
     <string name="theme_option_ocean">Ocean</string>
     <string name="theme_option_violet">Violet</string>
     <string name="theme_option_amoled">AMOLED Black</string>
@@ -48,8 +48,8 @@
     <string name="image_variant_description">Downloads the latest RestlessOS GSI from GitHub:</string>
     <string name="flavor_vanilla_title">RestlessOS 17.0.0 (arm64)</string>
     <string name="flavor_vanilla_description">TrebleDroid-based Android 17 GSI</string>
-    <string name="flavor_gapps_title">MindTheGapps Edition</string>
-    <string name="flavor_gapps_description">Official Google Play Store &amp; Play Services</string>
+    <string name="flavor_gapps_title">RestlessOS 17.0.0 (arm64)</string>
+    <string name="flavor_gapps_description">TrebleDroid-based Android 17 GSI</string>
     <string name="flavor_desc_vanilla">RestlessOS 17: TrebleDroid-based Android 17 GSI</string>
     <string name="flavor_desc_gapps">RestlessOS has no GApps build - this installs the standard image.</string>
 
@@ -68,7 +68,7 @@
     <string name="progress_connecting">Connecting to official SourceForge release…</string>
     <string name="progress_downloading">Downloading: %1$d MB / %2$d MB (%3$d%%) • %4$.1f MB/s</string>
     <string name="progress_extracting">Decompressing image with ARM64 7-Zip…</string>
-    <string name="progress_installed">LineageOS 23.2 (%1$s) installed successfully!</string>
+    <string name="progress_installed">RestlessOS 17 installed successfully!</string>
     <string name="progress_setup_failed">Setup failed: %1$s</string>
 
     <string name="launcher_safety_title">One UI Home Screen Safety</string>
@@ -77,13 +77,13 @@
     <string name="status_idle">Idle</string>
     <string name="log_initialized">OneRestless initialized.\n</string>
 
-    <string name="log_flavor_vanilla">Vanilla: The lightweight option</string>
-    <string name="log_flavor_gapps">MindTheGapps: LineageOS 23.2 + Google Play Store &amp; Services.</string>
-    <string name="log_root_required_setup">ERROR: Root privilege required to set up LineageOS!</string>
-    <string name="log_root_required_boot">ERROR: Root privilege required to boot LineageOS!</string>
+    <string name="log_flavor_vanilla">RestlessOS 17: TrebleDroid-based Android 17 GSI</string>
+    <string name="log_flavor_gapps">RestlessOS 17: TrebleDroid-based Android 17 GSI</string>
+    <string name="log_root_required_setup">ERROR: Root privilege required to set up RestlessOS!</string>
+    <string name="log_root_required_boot">ERROR: Root privilege required to boot RestlessOS!</string>
     <string name="log_root_required_restore">ERROR: Root privilege required to restore One UI!</string>
     <string name="log_root_error_unpacking">Error unpacking %1$s: %2$s</string>
-    <string name="log_assets_ready">OneLineage engine assets unpacked &amp; verified.</string>
+    <string name="log_assets_ready">OneRestless engine assets unpacked &amp; verified.</string>
     <string name="log_download_paused">Download paused.</string>
     <string name="log_download_resumed">Download resumed.</string>
     <string name="status_paused">Paused</string>
@@ -112,9 +112,9 @@
     <string name="dialog_cancel">Cancel</string>
     <string name="log_cleanup_start">\n[CLEANUP] Stopping running container processes &amp; unmounting…</string>
     <string name="log_cleanup_warning">✗ system.raw could not be fully removed (a loop device is still holding it busy). Try again, or reboot and retry.</string>
-    <string name="log_cleanup_done">✓ LineageOS files deleted cleanly. All loop mounts detached!</string>
+    <string name="log_cleanup_done">✓ RestlessOS files deleted cleanly. All loop mounts detached!</string>
     <string name="log_delete_failed">Delete failed: %1$s</string>
-    <string name="log_boot_start">\n[START] Preparing LineageOS 23.2 takeover…</string>
+    <string name="log_boot_start">\n[START] Preparing RestlessOS 17 takeover…</string>
     <string name="log_takeover_spawned">Takeover daemon spawned successfully. Display switching is in progress…</string>
     <string name="log_launch_failed">Launch error: %1$s</string>
     <string name="log_return_start">\n[START] Restoring One UI and resetting display…</string>

@@ -56,9 +56,7 @@ public class MainActivity extends Activity {
     private ScrollView logScrollView;
 
     private LinearLayout cardFlavorVanilla;
-    private LinearLayout cardFlavorGapps;
     private RadioButton rbVanilla;
-    private RadioButton rbGapps;
 
     private Button btnDownloadLineage;
     private Button btnDeleteLineage;
@@ -132,9 +130,7 @@ public class MainActivity extends Activity {
         tvLogStatus = findViewById(R.id.tv_log_status);
 
         cardFlavorVanilla = findViewById(R.id.card_flavor_vanilla);
-        cardFlavorGapps = findViewById(R.id.card_flavor_gapps);
         rbVanilla = findViewById(R.id.rb_vanilla);
-        rbGapps = findViewById(R.id.rb_gapps);
 
         btnDownloadLineage = findViewById(R.id.btn_download_lineage);
         btnDeleteLineage = findViewById(R.id.btn_delete_lineage);
@@ -168,31 +164,16 @@ public class MainActivity extends Activity {
     }
 
     private void setupFlavorSelection() {
-        View.OnClickListener clickVanilla = v -> selectFlavor(Flavor.VANILLA);
-        View.OnClickListener clickGapps = v -> selectFlavor(Flavor.GAPPS);
-
-        cardFlavorVanilla.setOnClickListener(clickVanilla);
-        cardFlavorGapps.setOnClickListener(clickGapps);
-
+        // RestlessOS ships a single image (no GApps build), so there is one flavor.
+        cardFlavorVanilla.setOnClickListener(v -> selectFlavor(Flavor.VANILLA));
         selectFlavor(Flavor.VANILLA);
     }
 
     private void selectFlavor(Flavor flavor) {
         selectedFlavor = flavor;
-        rbVanilla.setChecked(flavor == Flavor.VANILLA);
-        rbGapps.setChecked(flavor == Flavor.GAPPS);
-
-        cardFlavorVanilla.setBackgroundResource(flavor == Flavor.VANILLA ? R.drawable.radio_item_selected : R.drawable.radio_item_unselected);
-        cardFlavorGapps.setBackgroundResource(flavor == Flavor.GAPPS ? R.drawable.radio_item_selected : R.drawable.radio_item_unselected);
-
-        switch (flavor) {
-            case VANILLA:
-                tvDownloadDesc.setText(R.string.flavor_desc_vanilla);
-                break;
-            case GAPPS:
-                tvDownloadDesc.setText(R.string.flavor_desc_gapps);
-                break;
-        }
+        rbVanilla.setChecked(true);
+        cardFlavorVanilla.setBackgroundResource(R.drawable.radio_item_selected);
+        tvDownloadDesc.setText(R.string.flavor_desc_vanilla);
         if (currentPalette != null) applyFlavorCardTheme();
     }
 
@@ -432,11 +413,9 @@ public class MainActivity extends Activity {
 
     private void applyFlavorCardTheme() {
         if (currentPalette == null) return;
-        setFlavorCardTheme(cardFlavorVanilla, selectedFlavor == Flavor.VANILLA);
-        setFlavorCardTheme(cardFlavorGapps, selectedFlavor == Flavor.GAPPS);
+        setFlavorCardTheme(cardFlavorVanilla, true);
         ColorStateList tint = ColorStateList.valueOf(currentPalette.accent);
         rbVanilla.setButtonTintList(tint);
-        rbGapps.setButtonTintList(tint);
     }
 
     private void setFlavorCardTheme(View card, boolean selected) {
