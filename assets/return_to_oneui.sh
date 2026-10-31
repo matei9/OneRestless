@@ -129,6 +129,12 @@ if [ -f "$DEXOPT_SAVED" ]; then
     rm -f "$DEXOPT_SAVED"
 fi
 
+# ro.lineage.* were added for the guest (master_prepare.sh step 9e).
+LRP=$(which resetprop 2>/dev/null || echo /data/adb/ksu/bin/resetprop)
+for k in $(getprop | sed -n 's/^\[\(ro\.lineage[a-z]*\.[^]]*\)\].*/\1/p'); do
+    "$LRP" -d "$k" 2>/dev/null
+done
+
 echo "=== [5/5] Starting One UI Display & Host Services ==="
 
 # Reset battery statistics. The guest system_server writes its own BatteryStats

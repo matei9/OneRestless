@@ -1078,6 +1078,47 @@ elif [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ]; then
     echo "GMS core already provided (host apex or existing entry); using it for GApps"
 fi
 
+echo "=== 9e. Building the guest's aconfig storage and LineageOS props ==="
+# init and aconfigd normally build /metadata/aconfig on boot. The container runs
+# neither, so apps found no flag storage and every flag read as its default:
+# Material 3 Expressive, for one, is enabled by this GSI but stayed off. Start
+# from the host's storage (it covers the APEXes bound from the host), then
+# replace each partition and mounted APEX with the guest's own files.
+META="$ROOTFS/metadata"
+mount | grep -q " $META " || $BB mount -t tmpfs -o mode=755,size=32m tmpfs "$META"
+mkdir -p "$META/aconfig/boot" "$META/aconfig/maps" "$META/aconfig/flags"
+cp -f /metadata/aconfig/boot/*.val /metadata/aconfig/boot/*.info "$META/aconfig/boot/" 2>/dev/null
+cp -f /metadata/aconfig/maps/*.map "$META/aconfig/maps/" 2>/dev/null
+add_flags() {
+    [ -f "$2/package.map" ] && [ -f "$2/flag.map" ] && [ -f "$2/flag.val" ] || return 0
+    cp -f "$2/flag.val" "$META/aconfig/boot/$1.val"
+    cp -f "$2/flag.info" "$META/aconfig/boot/$1.info" 2>/dev/null
+    cp -f "$2/package.map" "$META/aconfig/maps/$1.package.map"
+    cp -f "$2/flag.map" "$META/aconfig/maps/$1.flag.map"
+}
+add_flags system "$ROOTFS/system/etc/aconfig"
+add_flags product "$PRODUCT_DIR/etc/aconfig"
+add_flags system_ext "$(in_rootfs /system_ext)/etc/aconfig"
+for a in "$ROOTFS"/apex/*/; do
+    n=$(basename "$a")
+    case "$n" in *@*) continue ;; esac
+    add_flags "$n" "${a}etc"
+done
+chown -R 1000:1000 "$META/aconfig"
+chmod -R a+rX "$META/aconfig"
+$BB chcon -R u:object_r:aconfig_storage_metadata_file:s0 "$META/aconfig" 2>/dev/null
+echo "aconfig storage: $(ls "$META/aconfig/boot" | grep -c '\.val$') containers"
+# The guest shares the host's property area, so its build.prop files are never
+# loaded. Settings reads the LineageOS version from these.
+grep -hE '^ro\.(lineage|lineagelegal)\.' "$PRODUCT_DIR/etc/build.prop" 2>/dev/null | while IFS='=' read -r k v; do
+    case "$k" in
+        # The GSI's version ends in "-" because it has no device; add the real one.
+        ro.lineage.version|ro.lineage.display.version) v="$v$(getprop ro.product.vendor.device)" ;;
+    esac
+    [ -n "$v" ] && "$RP" "$k" "$v" 2>/dev/null
+done
+echo "ro.lineage.version=$(getprop ro.lineage.version)"
+
 # PermissionController patch, second pass. The same block near step 4 runs
 # before the apex set is mounted, so find(1) finds nothing and Samsung's
 # PermissionController stays behind. Samsung's build requires
