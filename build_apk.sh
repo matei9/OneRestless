@@ -8,7 +8,7 @@ ANDROID_SDK="${ANDROID_SDK:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 SDK_TOOLS="${SDK_TOOLS:-$ANDROID_SDK/build-tools/34.0.0}"
 PLATFORM_JAR="${PLATFORM_JAR:-$ANDROID_SDK/platforms/android-34/android.jar}"
 BUILD_DIR="${BUILD_DIR:-$PROJECT_DIR/build}"
-OUT_APK="${OUT_APK:-$PROJECT_DIR/build/OneRestless.apk}"
+OUT_APK="${OUT_APK:-$PROJECT_DIR/build/OneLineage.apk}"
 [ -n "$JAVA_HOME" ] && export PATH="$JAVA_HOME/bin:$PATH"
 
 # Tools default to the SDK binaries; each can be overridden (e.g. on Linux with a

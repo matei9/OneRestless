@@ -190,7 +190,7 @@ set_prop vendor.audio.offload.track.enable false
 # The guest's artd runs background dexopt as soon as the phone is charging, and
 # with the host's speed-profile filter ART upgrades every shared system package
 # to full "speed": two dex2oat processes at ~400% CPU on a 4 GB Galaxy A17 5G,
-# 68 C on the big cores and RAM full. RestlessOS (GrapheneOS code) compiles
+# 68 C on the big cores and RAM full. The GSI's ART compiles
 # with "speed" no matter what pm.dexopt.bg-dexopt says, so turn the background
 # job off for the guest session and keep any other dexopt verify-only and
 # single-threaded (apps still JIT hot code: dalvik.vm.usejit is the host's,
@@ -286,7 +286,7 @@ if [ -n "$SOFTDOGS" ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q "softdog_
 # usage: softdog_feeder.sh <watchdog device>...
 LOG=/data/local/tmp/softdog_feeder.log
 echo "$(date) feeding: $*" >> "$LOG"
-echo "<6>OneRestless: feeding $*" > /dev/kmsg 2>/dev/null
+echo "<6>OneLineage: feeding $*" > /dev/kmsg 2>/dev/null
 fails=0
 while true; do
     for dev in "$@"; do
@@ -424,7 +424,7 @@ TAKEOVER_PID=$!
 echo "Takeover daemon PID: $TAKEOVER_PID"
 
 # Suppress ART's background dexopt for the first few minutes of the session.
-# RestlessOS (GrapheneOS ART) ignores pm.dexopt.disable_bg_dexopt, so its
+# The GSI's ART ignores pm.dexopt.disable_bg_dexopt, so its
 # scheduled bg-dexopt job recompiles every system package (~145) at full CPU
 # the moment the guest boots while charging: the phone overheats and
 # WindowManager is starved so SystemUI never comes up (black screen after the

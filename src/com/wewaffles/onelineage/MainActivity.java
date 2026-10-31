@@ -99,15 +99,17 @@ public class MainActivity extends Activity {
     private static final String STAGE_DIR = "/data/local/tmp/lineage_stage";
     private static final String SYSTEM_RAW = STAGE_DIR + "/system.raw";
 
-    // RestlessOS 17.0.0 (Android 17, CP2A.260605.016) arm64 ab GSI, xz-compressed raw
-    // ext4. Must match the host's Android 17 build: the container borrows the host's
-    // APEX modules, and assets/*_patched.jar are patched from exactly this build.
-    // RestlessOS has no GApps build, so GAPPS uses the same image.
-    private static final String URL_VANILLA = "https://github.com/cawilliamson/treble_restlessos/releases/download/17.0.0-202610280533/RestlessOS-arm64-ab-17.0.0-202610280533.img.xz";
-    private static final String URL_GAPPS = URL_VANILLA;
+    // LineageOS 24.0 (Android 17, SDK 37) arm64 Treble GSI, xz-compressed raw ext4.
+    // Must match the host's Android 17 build: the container borrows the host's APEX
+    // modules, and assets/*_patched.jar are patched from exactly this GSI's jars.
+    private static final String URL_VANILLA = "https://github.com/eyzner/LineageOS-GSI/releases/download/lineage-24.0-20261029/lineage-24.0-20261029-UNOFFICIAL-arm64_bvN.img.xz";
+    // MindTheGapps 17 (Android 17 arm64): a flashable zip; its system/product and
+    // system/system_ext trees are overlaid into the guest at takeover. Added on top
+    // of an installed vanilla image via the "Install GApps" button, not a download flavor.
+    private static final String URL_MINDTHEGAPPS = "https://github.com/MindTheGapps/17.0.0-arm64/releases/download/MindTheGapps-17.0.0-arm64-20261022_132445/MindTheGapps-17.0.0-arm64-20261022_132445.zip";
     // Fallback for the progress bar only, used when the server sends no Content-Length.
     private static final long ESTIMATED_VANILLA_BYTES = 1200000000L;
-    private static final long ESTIMATED_GAPPS_BYTES = ESTIMATED_VANILLA_BYTES;
+    private static final long ESTIMATED_GAPPS_BYTES = 560000000L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -162,9 +164,9 @@ public class MainActivity extends Activity {
         super.onResume();
         checkRootAndSystem();
     }
-
+        // LineageOS GSI download is a single vanilla image; GApps is added separately.
     private void setupFlavorSelection() {
-        // RestlessOS ships a single image (no GApps build), so there is one flavor.
+        // LineageOS GSI download is a single vanilla image; GApps is added separately.
         cardFlavorVanilla.setOnClickListener(v -> selectFlavor(Flavor.VANILLA));
         selectFlavor(Flavor.VANILLA);
     }
@@ -575,9 +577,9 @@ public class MainActivity extends Activity {
                     setSemanticTextColor(tvRootStatus, Color.parseColor("#FFB4AB"));
                 }
             });
-
+            // The guest GSI reports no Samsung build; detect it the same way
             // Check active userspace
-            // RestlessOS sets no ro.lineage.version, so detect the guest the same way
+            // The guest GSI reports no Samsung build; detect it the same way
             // returnToOneUI() does: its framework does not report a Samsung build.
             try {
                 final boolean inGuest = !"samsung".equalsIgnoreCase(android.os.Build.MANUFACTURER);
@@ -870,8 +872,8 @@ public class MainActivity extends Activity {
                 appendLog(getString(R.string.log_wiping_userdata));
                 runRootCmdDrained(wipeUserDataCmd());
 
-                String downloadUrl = (flavor == Flavor.GAPPS) ? URL_GAPPS : URL_VANILLA;
-                final long totalBytes = (flavor == Flavor.GAPPS) ? ESTIMATED_GAPPS_BYTES : ESTIMATED_VANILLA_BYTES;
+                String downloadUrl = URL_VANILLA;
+                final long totalBytes = ESTIMATED_VANILLA_BYTES;
                 // Download into the app's own cache dir, NOT STAGE_DIR directly: this
                 // process writes as the unprivileged app, and /data/local/tmp paths
                 // created by root are labeled shell_data_file, which SELinux blocks

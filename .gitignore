@@ -6,3 +6,5 @@ backups_*/
 res/values/build_info.xml
 *.img
 __pycache__/
+fw_d.log
+*.log

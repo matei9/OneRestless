@@ -370,7 +370,7 @@ def main(fw, svc, host=None):
     edit(svc, "com/android/server/StorageManagerService", "needsCheckpoint()Z",
          stub("0x0"), "host owns the userdata checkpoint")
 
-    # RestlessOS carries GrapheneOS' PackageVerityExt, which throws if an updated
+    # GrapheneOS-derived GSIs carry PackageVerityExt, which throws if an updated
     # system package has the same versionCode as the system image copy. The
     # container scans the host's APEXes through the host apexd, and the host's
     # decompressed compressed-APEXes (adservices, ondevicepersonalization,

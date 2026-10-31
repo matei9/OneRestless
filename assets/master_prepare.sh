@@ -830,7 +830,7 @@ mount_payload "runtime" "com.android.runtime"
 mount_payload "sdkext" "com.android.sdkext"
 mount_payload "nfcservices" "com.android.nfcservices"
 # tethering: chosen per GSI, three cases.
-#  1) A TrebleDroid-based GSI (phhusson lineage: RestlessOS, TrebleDroid, ...)
+#  1) A TrebleDroid-based GSI (phhusson lineage: LineageOS, TrebleDroid, ...)
 #     ships treble-overlay-tethering-nobpf.apk which activates when
 #     persist.sys.phh.tethering.nobpf=1. The overlay makes the connectivity
 #     service tolerate missing BPF maps ("Failed initialization BpfMaps,
@@ -877,7 +877,7 @@ elif ls "$ROOTFS/system/apex/com.google.android.tethering"* >/dev/null 2>&1 \
 else
     echo "tethering: using the host's module"
     # When PMS reconciles the host tethering APEX (Google-signed NetworkStack
-    # inside) with the GSI's /system/priv-app/NetworkStack (RestlessOS- or
+    # inside) with the GSI's /system/priv-app/NetworkStack (LineageOS- or
     # LineageOS-signed), both declare android:sharedUserId="android.uid.networkstack"
     # and the signature mismatch is fatal:
     #   FATAL EXCEPTION IN SYSTEM PROCESS: main

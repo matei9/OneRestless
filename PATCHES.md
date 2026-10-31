@@ -103,11 +103,11 @@ are built locally into `../google-gsi-overlay/` and passed to `build_apk.sh` via
 `com.google.android.<name>.apex` naming (compressed or not), and the payload cache
 is cleared whenever `system.raw` changes.
 
-## Galaxy A17 5G / One UI 9 / RestlessOS additions
+## Galaxy A17 5G / One UI 9 / LineageOS 24.0 additions
 
 | Where | Change | Why |
 |---|---|---|
-| services `PackageVerityExt.checkSystemPackageUpdate` | no-op | RestlessOS (GrapheneOS code) rejects an updated system package with the same versionCode; the host's decompressed APEXes always match their factory copy, so PMS died in `scanApexPackages` |
+| services `PackageVerityExt.checkSystemPackageUpdate` | no-op | GrapheneOS-derived GSIs reject an updated system package with the same versionCode; the host's decompressed APEXes always match their factory copy, so PMS died in `scanApexPackages` |
 | services `StorageManagerService.commitChanges` / `abortChanges` / `needsCheckpoint` | no-op / no-op / `false` | the userdata checkpoint is the host's; the guest's commit failed at boot-complete, AMS requested a reboot, and with `lowLevelReboot` stubbed ShutdownThread powered the phone off (`reboot,lpm`) |
 | framework `ICameraService`, `ICameraDeviceUser`, `ISensorPrivacyManager` | Proxies send the host's transaction codes, Stubs translate host codes at the top of `onTransact` | Samsung inserts methods mid-interface (`ICameraDeviceUser.setParameters` at 13, `ICameraService.notifyDeviceStateChangeSync` at 23), so guest calls to the host cameraserver hit the wrong method (`getCaptureResultMetadataQueue` -> `ParcelFormatException: Not enough data`) |
 | services `SyntheticPasswordManager.getNextAvailableWeaverSlot` | allocate from the highest slot down | Weaver is the host's secure element and the guest's lock-settings records are separate, so it treated every slot as free: a PIN set in the guest took slot 1, overwrote One UI's PIN secret, and the One UI PIN was rejected from then on (CE storage lost). One UI allocates from slot 0 up. Gatekeeper, keystore2 and the fingerprint sensor's user-0 templates are still shared, so One UI must stay without a PIN or fingerprint while the guest uses one |

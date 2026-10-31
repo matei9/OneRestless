@@ -2,25 +2,27 @@
 
 **NOTE: OneLineage is just a proof of concept, this repo should provide you with enough to port other roms to bootloader locked devices, the lineageos with this repo is just a demo of this capability, and therefore does not fully work. Have fun!**
 
-> ## Galaxy A17 5G / One UI 9 / RestlessOS fork
+> ## Galaxy A17 5G / One UI 9 / LineageOS 24.0 fork (`lineage-24.0` branch)
 >
-> This fork targets the **RestlessOS (Android 17) GSI** on a bootloader-locked **Galaxy A17 5G** running One UI 9.
-> It builds on Dylan's One UI 9 / RestlessOS port (`restlessos` branch). The patched framework jars must match the
+> This branch targets the **LineageOS 24.0 (Android 17) Treble GSI** on a bootloader-locked **Galaxy A17 5G**
+> running One UI 9, with an optional **MindTheGapps 17** install. The patched framework jars must match the
 > staged GSI build; see [PATCHES.md](PATCHES.md) for how to regenerate them.
 >
-> **Status: basically usable.** All the main functions work: boot, display (with an A17 overlay for the cutout,
-> rounded corners, 90 Hz and brightness), touch, audio, camera, Wi-Fi, mobile data, internal storage, root
-> (KernelSU) inside RestlessOS, PIN and fingerprint in RestlessOS, and switching back to One UI.
+> **Status:** the container and all the A17 port fixes carry over from the RestlessOS work (boot, display with the
+> A17 overlay for the cutout / rounded corners / 90 Hz / brightness, touch, audio, camera, Wi-Fi, mobile data,
+> internal storage, root (KernelSU), PIN and fingerprint, switching back to One UI). The LineageOS 24.0 jars are
+> re-patched from this GSI with the same `tools/patch_smali.py`. The **Install GApps** button downloads MindTheGapps 17
+> and overlays its `product` / `system_ext` trees (and the GMS APEX) into the guest — best-effort, still being tested.
 >
-> **Tested on:** Galaxy A17 5G (SM-A176B, bootloader locked, rooted with KernelSU), One UI 9
-> (`A176BXXU8DZJ5`), with the RestlessOS GSI
-> [`RestlessOS-arm64-ab-17.0.0-202610280533`](https://github.com/cawilliamson/treble_restlessos/releases/tag/17.0.0-202610280533).
+> **Target GSI:**
+> [`lineage-24.0-20261029-UNOFFICIAL-arm64_bvN`](https://github.com/eyzner/LineageOS-GSI/releases/tag/lineage-24.0-20261029),
+> on Galaxy A17 5G (SM-A176B, bootloader locked, rooted with KernelSU), One UI 9 (`A176BXXU8DZJ5`).
 >
-> **⚠️ Do not set any screen lock in One UI** (no PIN, pattern, password or fingerprint). RestlessOS shares the phone's
+> **⚠️ Do not set any screen lock in One UI** (no PIN, pattern, password or fingerprint). The guest shares the phone's
 > security hardware with One UI (Weaver, Gatekeeper, keystore and the fingerprint sensor). A screen lock set in
-> RestlessOS can overwrite One UI's, and One UI will then reject its own PIN. Its internal storage can't be decrypted
-> again, and the only way back is a factory reset. RestlessOS also deletes fingerprints it didn't enroll itself.
-> Set your PIN and fingerprint **only in RestlessOS**.
+> the guest can overwrite One UI's, and One UI will then reject its own PIN. Its internal storage can't be decrypted
+> again, and the only way back is a factory reset. The guest also deletes fingerprints it didn't enroll itself.
+> Set your PIN and fingerprint **only in the guest**.
 
 Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on a rooted Samsung phone, with no reflashing and no second partition. OneLineage stages the GSI under `/data/local/tmp`, pivots into it as a container with its own zygote and system_server, and can hand the screen back to One UI.
 
@@ -69,7 +71,7 @@ Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on
 12. **Boot diagnostics.** Each boot writes `/data/boot_failures.log`.
 
 ## Building
-Set `ANDROID_SDK` (or `ANDROID_HOME`) to your Android SDK directory and run `./build_apk.sh`; it writes `build/OneRestless.apk` and creates a development keystore on first use. The build also assembles `svcstub.dex` and the device overlays under `overlay/`. Defaults target build-tools 34.0.0 / android-34, but on a newer JDK (e.g. 27) `d8` from build-tools 34 can crash — pass build-tools 35 instead:
+Set `ANDROID_SDK` (or `ANDROID_HOME`) to your Android SDK directory and run `./build_apk.sh`; it writes `build/OneLineage.apk` and creates a development keystore on first use. The build also assembles `svcstub.dex` and the device overlays under `overlay/`. Defaults target build-tools 34.0.0 / android-34, but on a newer JDK (e.g. 27) `d8` from build-tools 34 can crash — pass build-tools 35 instead:
 
 ```sh
 SDK_TOOLS=$ANDROID_SDK/build-tools/35.0.0 \
@@ -79,6 +81,6 @@ PLATFORM_JAR=$ANDROID_SDK/platforms/android-35/android.jar ./build_apk.sh
 Override `ANDROID_SDK`, `SDK_TOOLS`, `PLATFORM_JAR`, or `OUT_APK` as needed. `EXTRA_ASSETS_DIR` supplies locally-built assets (e.g. jars patched from a license-restricted GSI) that replace same-named files in `assets/` for that build only.
 
 ## Credits
-OneLineage by WeWaffles. RestlessOS Treble GSI builds by
-[cawilliamson](https://github.com/cawilliamson) ([treble_restlessos](https://github.com/cawilliamson/treble_restlessos)).
+OneLineage by WeWaffles. LineageOS 24.0 Treble GSI builds by
+[eyzner](https://github.com/eyzner) ([LineageOS-GSI](https://github.com/eyzner/LineageOS-GSI)). MindTheGapps by the MindTheGapps project.
 LineageOS GSI builds by MisterZtr (SourceForge). LineageOS and Android are trademarks of their respective owners. Not affiliated with Samsung, Google or LineageOS.

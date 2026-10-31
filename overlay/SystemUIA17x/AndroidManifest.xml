@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- See overlay/FrameworkResA17x/AndroidManifest.xml for why targetSdkVersion is 28. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="me.restless.overlay.a17x.systemui">
+    package="me.lineage.overlay.a17x.systemui">
     <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="28" />
     <overlay android:targetPackage="com.android.systemui" android:isStatic="true" android:priority="10" />
     <application android:hasCode="false" />
