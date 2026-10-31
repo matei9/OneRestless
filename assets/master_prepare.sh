@@ -1016,18 +1016,32 @@ echo "=== 9d. Activating the MindTheGapps GMS APEX (optional) ==="
 # way mount_payload does for the GSI's own APEXes: extract apex_payload.img,
 # loop-mount it under /apex, and add an apex-info-list entry so PMS scans it.
 # Best-effort: failure here only loses GMS core, not the rest of GApps.
+GMS_NAME="com.google.android.gmssystem"
 GMS_APEX=$(ls "$STAGE/gapps/system/product/apex/"com.google.android.gmssystem*.apex 2>/dev/null | head -1)
-if [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ] && [ -f "$ROOTFS/apex/apex-info-list.xml" ]; then
-    GMS_NAME="com.google.android.gmssystem"
-    # Decode version (apex_manifest.pb field 2 varint) for the @<ver> dir + info-list.
+# Only activate MindTheGapps' GMS core APEX if nothing already provides it. On a
+# device whose host (e.g. One UI) ships Google GMS, /apex/com.google.android.gmssystem@<ver>
+# is already bound in from the host (step 9) and the guest scans it - mounting a
+# second, different version here makes PackageManager crash on the duplicate/
+# signature conflict and system_server never comes up. In that case use the host's.
+if [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ] && [ -f "$ROOTFS/apex/apex-info-list.xml" ] && \
+   ! ls -d "$ROOTFS/apex/${GMS_NAME}"* >/dev/null 2>&1 && \
+   ! grep -q "moduleName=\"$GMS_NAME\"" "$ROOTFS/apex/apex-info-list.xml" 2>/dev/null; then
+    # Decode version: apex_manifest.pb is { string name = 1; int64 version = 2; }.
+    # Skip field 1 (0x0a <len> <name>), then read the field-2 (0x10) varint.
     $BB unzip -p "$GMS_APEX" apex_manifest.pb > "$STAGE/gms_manifest.pb" 2>/dev/null
     GMS_VER=$($BB od -An -tu1 "$STAGE/gms_manifest.pb" 2>/dev/null | tr -s ' ' '\n' | grep -v '^$' | awk '
-        BEGIN{s=0; st=0; v=0; sh=0}
-        { b=$1+0
-          if(st==0){ if(b==16){st=1; v=0; sh=0} next }   # 0x10 = field 2 (version), wire type 0
-          v += (b%128) * (2^sh); sh+=7; if(b<128){print v; exit} }')
-    [ -n "$GMS_VER" ] || GMS_VER=1
+        BEGIN{i=0; st=0; v=0; sh=0}
+        { b[i++]=$1+0 }
+        END{
+          p=0
+          if(b[0]==10){ p=2+b[1] }          # 0x0a <len> <name>, jump past name
+          if(b[p]!=16){ print ""; exit }     # expect 0x10 (field 2 varint)
+          p++
+          while(1){ c=b[p++]; v += (c%128)*(2^sh); sh+=7; if(c<128) break }
+          print v }')
+    case "$GMS_VER" in ''|*[!0-9]*) GMS_VER=1 ;; esac
     rm -f "$STAGE/gms_manifest.pb"
+    echo "No existing GMS apex; activating MindTheGapps GMS core @${GMS_VER}"
     # Put the apex file where the info-list modulePath points (survives 9b's check).
     mkdir -p "$PRODUCT_DIR/apex"
     cp -f "$GMS_APEX" "$PRODUCT_DIR/apex/$(basename "$GMS_APEX")" 2>/dev/null
@@ -1060,6 +1074,8 @@ if [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ] && [ -f "$ROOTFS/ape
     else
         echo "  !!! could not extract GMS apex payload - Play Store will lack GMS core"
     fi
+elif [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ]; then
+    echo "GMS core already provided (host apex or existing entry); using it for GApps"
 fi
 
 # PermissionController patch, second pass. The same block near step 4 runs
