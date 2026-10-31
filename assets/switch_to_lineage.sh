@@ -426,6 +426,16 @@ TSP
 chmod 755 /data/local/tmp/tsp_keepalive.sh
 $BB setsid sh /data/local/tmp/tsp_keepalive.sh </dev/null >/dev/null 2>&1 &
 
+# Hold the GPU at 611 MHz or above while the guest runs. It idles at 208 MHz and One
+# UI boosts it during animations through Samsung services the guest doesn't have, so
+# it ramped up too late: 23.6% janky frames and 44 ms p90 in the launcher against 8.4%
+# and 16 ms with this floor (CPU clocks barely mattered, and higher floors add
+# nothing). The GPU still powers off when idle. return_to_oneui.sh restores it.
+if grep -q 611000 /sys/kernel/gpu/gpu_freq_table 2>/dev/null; then
+    cat /sys/kernel/gpu/gpu_min_clock > "$STAGE/host_gpu_min"
+    echo 611000 > /sys/kernel/gpu/gpu_min_clock
+fi
+
 # Start UI Activator daemon
 $BB sh -c "
 BB=\"$BB\"

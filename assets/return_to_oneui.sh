@@ -130,6 +130,13 @@ if [ -f "$DEXOPT_SAVED" ]; then
     rm -f "$DEXOPT_SAVED"
 fi
 
+# switch_to_lineage.sh raised the GPU's minimum clock for the guest.
+GPU_SAVED=/data/local/tmp/lineage_stage/host_gpu_min
+if [ -f "$GPU_SAVED" ]; then
+    cat "$GPU_SAVED" > /sys/kernel/gpu/gpu_min_clock
+    rm -f "$GPU_SAVED"
+fi
+
 # ro.lineage.* were added for the guest (master_prepare.sh step 9e).
 LRP=$(which resetprop 2>/dev/null || echo /data/adb/ksu/bin/resetprop)
 for k in $(getprop | sed -n 's/^\[\(ro\.lineage[a-z]*\.[^]]*\)\].*/\1/p'); do
