@@ -216,6 +216,16 @@ else
     ls /linkerconfig 2>&1 | head -5
 fi
 
+# zygote64 waits for this one before it forks system_server. Not in its own session:
+# zygote calls setpgid(0, 0), which a session leader can't.
+echo "[Pivoted Root] Starting the 32-bit zygote..."
+env -i ANDROID_SOCKET_zygote_secondary=3 ANDROID_SOCKET_usap_pool_secondary=4 \
+    PATH=/system/bin:/system/xbin ANDROID_ROOT=/system ANDROID_DATA=/data ANDROID_STORAGE=/storage \
+    ANDROID_ART_ROOT=/apex/com.android.art ANDROID_I18N_ROOT=/apex/com.android.i18n \
+    ANDROID_TZDATA_ROOT=/apex/com.android.tzdata EXTERNAL_STORAGE=/sdcard \
+    ASEC_MOUNTPOINT=/mnt/asec ANDROID_ASSETS=/system/app $ZENV \
+    /data/zygote32_exec </dev/null >/dev/null 2>&1 &
+
 echo "[Pivoted Root] Launching Zygote & SystemServer via zygote_exec..."
 exec env -i ANDROID_SOCKET_zygote=3 ANDROID_SOCKET_usap_pool_primary=4 \
     PATH=/system/bin:/system/xbin ANDROID_ROOT=/system ANDROID_DATA=/data ANDROID_STORAGE=/storage \

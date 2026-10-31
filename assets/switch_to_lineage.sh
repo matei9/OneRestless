@@ -265,6 +265,10 @@ echo "watchdog devices held by system_server: ${SOFTDOGS:-none}"
 pkill -f "while true; do [ \"\$(getprop init.svc.zygote)\"" 2>/dev/null || true
 pkill -f "while true; do for p in \\\$(pidof audioserver cameraserver)" 2>/dev/null || true
 setprop ctl.stop zygote
+# The 32-bit zygote too: left running it serves zygote_secondary, so 32-bit processes
+# (WebView's renderers) ran One UI's framework under the guest's system_server. They
+# hung starting up, and Google sign-in sat on "Checking info" with no page behind it.
+setprop ctl.stop zygote_secondary
 setprop ctl.stop surfaceflinger
 # audioserver/cameraserver are deliberately left running. The guest shares this
 # binder namespace, and its AudioService.<init> -> AudioDeviceBroker.init ->
@@ -278,6 +282,7 @@ kill -9 $(pidof bootanimation) 2>/dev/null || true
 kill -9 $(pidof app_process64) 2>/dev/null || true
 kill -9 $(pidof zygote_exec) 2>/dev/null || true
 kill -9 $(pidof zygote64) 2>/dev/null || true
+kill -9 $(pidof webview_zygote) 2>/dev/null || true
 kill -9 $(pidof system_server) 2>/dev/null || true
 sleep 1
 
@@ -381,13 +386,15 @@ kill -9 $(pidof idmap2d) 2>/dev/null || true
 sleep 1
 
 # Suppress the host zygote only, so Samsung init does not resurrect it
-nohup $BB sh -c "while true; do [ \"\$(getprop init.svc.zygote)\" = \"running\" ] && setprop ctl.stop zygote; sleep 1; done" </dev/null >/dev/null 2>&1 &
+nohup $BB sh -c "while true; do [ \"\$(getprop init.svc.zygote)\" = \"running\" ] && setprop ctl.stop zygote; [ \"\$(getprop init.svc.zygote_secondary)\" = \"running\" ] && setprop ctl.stop zygote_secondary; sleep 1; done" </dev/null >/dev/null 2>&1 &
 
 # Copy inner script and zygote_exec into container data partition
 cp -f "$STAGE/master_inner.sh" "$STAGE/data/master_inner.sh"
 chmod 755 "$STAGE/data/master_inner.sh"
 cp -f "$STAGE/zygote_exec" "$STAGE/data/zygote_exec"
 chmod 755 "$STAGE/data/zygote_exec"
+cp -f "$STAGE/zygote32_exec" "$STAGE/data/zygote32_exec"
+chmod 755 "$STAGE/data/zygote32_exec"
 cp -f "$STAGE/zygote_classpath.env" "$STAGE/data/zygote_classpath.env" 2>/dev/null || true
 
 # Launch takeover inside isolated mount namespace

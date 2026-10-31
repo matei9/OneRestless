@@ -31,6 +31,9 @@ pkill -9 -f "rescue_boot_suppress" 2>/dev/null || true
 pkill -9 -f "system_server" 2>/dev/null || true
 pkill -9 -f org.lineageos 2>/dev/null || true
 pkill -9 -x zygote64 2>/dev/null || true
+# The guest's 32-bit zygote. init isn't running the host's yet, so this name is only
+# the guest's here, and the sweep below misses it: it matches by filesystem.
+kill -9 $(pidof zygote) $(pidof webview_zygote) 2>/dev/null || true
 kill -9 $(pidof surfaceflinger) 2>/dev/null || true
 
 # Kill every remaining guest daemon: anything whose executable lives on the
@@ -169,6 +172,7 @@ setprop ctl.start vendor.fingerprint-default-1_0 2>/dev/null || true
 setprop ctl.start vendor.biometrics.fingerprint.inscreen 2>/dev/null || true
 
 setprop ctl.start surfaceflinger
+setprop ctl.start zygote_secondary
 setprop ctl.start zygote
 setprop ctl.start audioserver
 setprop ctl.start cameraserver
