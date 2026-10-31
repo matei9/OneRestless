@@ -86,8 +86,14 @@ if [ -d "$BACKUP_DIR" ] && [ -d "$LAUNCHER_DATA/databases" ]; then
 fi
 
 echo "=== [3/5] Unmounting Container Overlays ==="
-umount -l /data/local/tmp/lineage_stage/rootfs/* 2>/dev/null || true
-umount -l /data/local/tmp/lineage_stage/rootfs/apex/* 2>/dev/null || true
+# Never unmount rootfs/* here. rootfs/product is the GSI's absolute symlink, so
+# umount followed it to the HOST's /product, and rootfs/mnt is a shared bind of
+# the host's /mnt, so unmounting it propagated back and took /mnt/vendor/efs and
+# /mnt/installer too. Without /product, One UI lost GoogleExtServicesConfigOverlay,
+# system_server died on "Required services extension package is missing" and
+# RescueParty rebooted the phone. Make the tree private, then detach it whole.
+BB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
+"$BB" mount --make-rprivate /data/local/tmp/lineage_stage/rootfs 2>/dev/null || true
 umount -l /data/local/tmp/lineage_stage/product_overlay 2>/dev/null || true
 # Match mount points only: the guest's /system/product overlayfs carries
 # "lowerdir=/data/local/tmp/lineage_stage/rootfs/..." in its options.
@@ -96,7 +102,6 @@ while [ "$i" -lt 100 ] && awk '$2 ~ "^/data/local/tmp/lineage_stage/rootfs" { f 
     umount -l /data/local/tmp/lineage_stage/rootfs 2>/dev/null || true
     sleep 0.1; i=$((i + 1))
 done
-BB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
 if [ -x "$BB" ]; then
     for l in $($BB losetup -a | grep "system.raw" | cut -d: -f1); do
         $BB losetup -d "$l" 2>/dev/null || true
