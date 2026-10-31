@@ -321,6 +321,11 @@ def main(fw, svc, host=None):
                 "isUserUnlocked(Landroid/os/UserHandle;)Z", "isUserUnlockingOrUnlocked(I)Z"]:
         edit(fw, "android/os/UserManager", sig, stub("0x1"), "always unlocked")
     edit(fw, "android/os/storage/StorageManager", "isCeStorageUnlocked(I)Z", stub("0x1"), "CE always unlocked")
+    # Samsung's audioserver lists a port the GSI can't convert, so listAudioPorts
+    # always fails, and every process using AudioManager retried it every 100 ms
+    # forever: constant binder traffic into audioserver and ~40 log lines a second.
+    edit(fw, "android/media/AudioPortEventHandler$1", "handleMessage(Landroid/os/Message;)V",
+         delete_lines(r"->sendMessageDelayed\("), "no endless audio port retry")
     edit(fw, "android/hardware/camera2/CameraCharacteristics", "getPhysicalCameraIds()Ljava/util/Set;",
          torch_skips_logical_cameras, "flashlight tile uses camera 0")
     for n in ["disable", "enable", "getSecureLockDeviceAvailability", "isSecureLockDeviceEnabled",
