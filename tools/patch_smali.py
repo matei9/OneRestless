@@ -242,6 +242,19 @@ def shorter_boot_timeout(body):
     return None
 
 
+def scan_apex_on_symlinked_partition(body):
+    """The host's apexd reports /product/apex/... but the GSI's product partition
+    resolves to /system/product, so this text match found no partition and the
+    gmssystem APEX was never scanned: no com.google.android.gms, and Play Store
+    crashed. Canonicalize the APEX path the way the partition folder already is."""
+    n, out = 0, []
+    for l in body:
+        if re.search(r"invoke-virtual \{v3\}, Ljava/io/File;->getAbsolutePath\(\)", l):
+            l, n = l.replace("getAbsolutePath", "getCanonicalPath"), n + 1
+        out.append(l)
+    return out if n == 2 else None
+
+
 # ---- align binder transaction codes with the host -----------------------
 # The guest's apps talk straight to the HOST's native daemons (cameraserver,
 # audioserver, ...), and those call back into the guest's system_server. Samsung
@@ -345,6 +358,9 @@ def main(fw, svc, host=None):
              stub("void"), "skip permission enforce")
 
     print("services.jar")
+    edit(svc, "com/android/server/pm/InitAppsHelper",
+         "resolveApexToScanPartition(Lcom/android/server/pm/ApexManager$ActiveApexInfo;)Lcom/android/server/pm/ScanPartition;",
+         scan_apex_on_symlinked_partition, "scan APEXes on symlinked partitions")
     edit(svc, "com/android/server/wm/WindowManagerService", "enableScreenAfterBoot()V",
          shorter_boot_timeout, "5 s boot timeout")
     edit(svc, "com/android/server/Watchdog", "run()V",

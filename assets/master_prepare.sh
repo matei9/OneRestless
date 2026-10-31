@@ -1110,6 +1110,26 @@ elif [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ]; then
     echo "GMS core already provided (host apex or existing entry); using it for GApps"
 fi
 
+# The host's gmssystem APEX is scanned like any other, so a vanilla boot would get
+# GMS core without GSF and crash-loop it. Empty its priv-app there. Private first:
+# the bind is a peer of the host's /apex, and this must not reach One UI.
+if [ ! -f "$STAGE/install_gapps.flag" ]; then
+    for d in "$ROOTFS/apex/$GMS_NAME" "$ROOTFS/apex/$GMS_NAME"@*; do
+        [ -d "$d/priv-app" ] || continue
+        $BB mount --make-private "$d" 2>/dev/null && $BB mount -t tmpfs tmpfs "$d/priv-app"
+    done
+fi
+
+# The host's gmssystem APEX is scanned like any other, so a vanilla boot would get
+# GMS core without GSF and crash-loop it. Empty its priv-app there. Private first:
+# the bind is a peer of the host's /apex, and this must not reach One UI.
+if [ ! -f "$STAGE/install_gapps.flag" ]; then
+    for d in "$ROOTFS/apex/$GMS_NAME" "$ROOTFS/apex/$GMS_NAME"@*; do
+        [ -d "$d/priv-app" ] || continue
+        $BB mount --make-private "$d" 2>/dev/null && $BB mount -t tmpfs tmpfs "$d/priv-app"
+    done
+fi
+
 echo "=== 9e. Building the guest's aconfig storage and LineageOS props ==="
 # init and aconfigd normally build /metadata/aconfig on boot. The container runs
 # neither, so apps found no flag storage and every flag read as its default:
