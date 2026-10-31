@@ -457,6 +457,17 @@ while true; do
     sleep 2
     PID=\$(pidof system_server | awk '{print \$1}')
     if [ -n \"\$PID\" ]; then
+        # Set the default home as early as possible. Trebuchet's (Launcher3QuickStep)
+        # OverviewComponentObserver resolves a HOME intent with flags=0, which returns
+        # null until a default home is assigned; that NPEs TouchInteractionService and
+        # the launcher crash-loops (blank screen, \"Trebuchet keeps stopping\"). A fresh
+        # guest /data has no default home, so set it here, retried until it sticks.
+        if [ -z \"\$HOME_SET\" ]; then
+            if $BB nsenter -t \$PID -m /system/bin/cmd package set-home-activity com.android.launcher3/.uioverrides.QuickstepLauncher >/dev/null 2>&1; then
+                HOME_SET=1
+                echo '[UI Activator] default home set to Launcher3 QuickstepLauncher'
+            fi
+        fi
         if $BB nsenter -t \$PID -m /system/bin/dumpsys window 2>/dev/null | grep -q 'mStatusBar'; then
             echo '[UI Activator] WindowManager is ready! Dismissing bootanim and unlocking...'
             setprop service.bootanim.exit 1

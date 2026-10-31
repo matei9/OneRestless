@@ -162,3 +162,4 @@ container is best-effort and still being validated on-device.
 |---|---|---|
 | services `PermissionManagerService.create` | skip the `getService("permissionmgr")` lookup | the shared servicemanager returns the host's binder proxy, and casting it to the local class threw `ClassCastException` in system_server |
 | `assets/service-connectivity_patched.jar` | rebuilt from this GSI's tethering APEX with `tools/patch_svcconn.py` | the previous jar came from RestlessOS and needs GrapheneOS's `android.ext.settings` classes, which LineageOS doesn't have, so `ConnectivityServiceInitializer` failed with `NoClassDefFoundError` |
+| `switch_to_lineage.sh` UI activator | `cmd package set-home-activity` for Launcher3 | Trebuchet crash-looped in `OverviewComponentObserver` because resolving its own HOME activity returned null; setting the default home and restarting it stopped the crashes |
