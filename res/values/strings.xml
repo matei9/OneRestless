@@ -125,4 +125,14 @@
     <string name="log_backup_failed">Backup failed: %1$s</string>
     <string name="log_launcher_restore_start">\nRestoring One UI Home Screen layout…</string>
     <string name="log_launcher_restore_failed">Restore failed: %1$s</string>
+    <string name="btn_install_gapps">Install GApps (MindTheGapps)</string>
+    <string name="btn_installing_gapps">Installing GApps…</string>
+    <string name="progress_gapps_downloading">Downloading MindTheGapps…</string>
+    <string name="progress_gapps_extracting">Extracting MindTheGapps…</string>
+    <string name="progress_gapps_done">GApps staged — switch to LineageOS to apply</string>
+    <string name="log_gapps_need_image">ERROR: install the LineageOS image first, then add GApps.</string>
+    <string name="log_gapps_start">\n[GAPPS] Downloading MindTheGapps 17…</string>
+    <string name="log_gapps_extract">[GAPPS] Extracting into the staged image…</string>
+    <string name="log_gapps_done">✓ MindTheGapps staged. It will be overlaid on the next switch to LineageOS.</string>
+    <string name="log_gapps_fail">GApps install failed: %1$s</string>
 </resources>

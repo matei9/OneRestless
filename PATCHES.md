@@ -139,3 +139,20 @@ host's `dumpsys display`:
   One UI drives the panel up to 665 / 1050 nits with brightness floats above 1.0,
   which AOSP clamps.
 - power profile, nav bar, long-press power behaviour
+
+## MindTheGapps (optional, `lineage-24.0` branch)
+The app's **Install GApps** button downloads MindTheGapps 17 and extracts its
+`system/` tree to `$STAGE/gapps`, then `touch`es `$STAGE/install_gapps.flag`
+(it requires the vanilla image to be installed first). On the next switch,
+`master_prepare.sh`:
+- overlays `system/product/{app,priv-app,etc,framework,lib64,overlay}` into the
+  guest `/product` (step 5f) and `system/system_ext/{etc,priv-app}` into a tmpfs
+  overlay on the guest `/system_ext`;
+- activates the GMS core APEX `com.google.android.gmssystem` (step 9d) the same
+  way the GSI's own APEXes are mounted: extract `apex_payload.img`, decode the
+  version from `apex_manifest.pb`, loop-mount it under `/apex`, and add an
+  `apex-info-list.xml` entry so PackageManager scans it.
+
+The product/system_ext overlay (Play Store, sync adapters, permissions,
+sysconfig) is the reliable part; the GMS-APEX activation in the init-less
+container is best-effort and still being validated on-device.

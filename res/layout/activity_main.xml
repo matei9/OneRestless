@@ -293,6 +293,18 @@
                     android:textSize="13sp"
                     android:fontFamily="sans-serif-medium" />
             </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_install_gapps"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/btn_m3_tonal"
+                android:text="@string/btn_install_gapps"
+                android:textAllCaps="false"
+                android:textColor="@color/m3_primary"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium" />
         </LinearLayout>
 
         <!-- One UI Protection Card -->

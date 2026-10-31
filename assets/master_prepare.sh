@@ -154,7 +154,7 @@ for f in "$STAGE"/treble-overlay-*.apk; do
     case "$(basename "$f" .apk | tr 'A-Z' 'a-z')" in *"$DEVICE") DEVICE_OVERLAYS="$DEVICE_OVERLAYS $f" ;; esac
 done
 if [ -d "$PRODUCT_DIR" ] && ! mount | grep -q " $PRODUCT_DIR type overlay " && \
-   { [ -n "$DEVICE_OVERLAYS" ] || { [ -d /product/apex ] && [ ! -d "$PRODUCT_APEX" ]; }; }; then
+   { [ -n "$DEVICE_OVERLAYS" ] || [ -f "$STAGE/install_gapps.flag" ] || { [ -d /product/apex ] && [ ! -d "$PRODUCT_APEX" ]; }; }; then
     OV="$STAGE/product_overlay"
     mkdir -p "$OV"
     mount | grep -q " $OV " || $BB mount -t tmpfs tmpfs "$OV"
@@ -173,6 +173,44 @@ if [ -n "$DEVICE_OVERLAYS" ] && mount | grep -q " $PRODUCT_DIR type overlay "; t
             chcon u:object_r:system_file:s0 "$PRODUCT_DIR/overlay/$(basename "$f")" 2>/dev/null
         echo "Device overlay: $(basename "$f")"
     done
+fi
+
+# MindTheGapps overlay (optional, set up by the app's "Install GApps" button,
+# which downloads the zip and extracts its system/ tree to $STAGE/gapps). The
+# zip installs to /product (apps, priv-app, framework, lib64, permissions,
+# sysconfig) and /system_ext (etc, priv-app). Overlay those into the guest so
+# PackageManager scans them. GMS core ships as an APEX and is handled at step 9d.
+GAPPS="$STAGE/gapps/system"
+if [ -f "$STAGE/install_gapps.flag" ] && [ -d "$GAPPS/product" ] && mount | grep -q " $PRODUCT_DIR type overlay "; then
+    echo "=== 5f. Overlaying MindTheGapps (product) ==="
+    for sub in app priv-app etc framework lib64 overlay; do
+        [ -d "$GAPPS/product/$sub" ] || continue
+        mkdir -p "$PRODUCT_DIR/$sub"
+        cp -a "$GAPPS/product/$sub/." "$PRODUCT_DIR/$sub/" 2>/dev/null
+        echo "  + product/$sub"
+    done
+    chcon -R u:object_r:system_file:s0 "$PRODUCT_DIR/app" "$PRODUCT_DIR/priv-app" \
+        "$PRODUCT_DIR/etc" "$PRODUCT_DIR/framework" "$PRODUCT_DIR/lib64" 2>/dev/null || true
+
+    # system_ext tree (a few priv-apps + permissions). /system_ext is part of the
+    # read-only GSI image, so lay a tmpfs overlay over it just like /product.
+    SYSEXT_DIR="$(in_rootfs /system_ext)"
+    if [ -d "$GAPPS/system_ext" ] && [ -d "$SYSEXT_DIR" ] && ! mount | grep -q " $SYSEXT_DIR type overlay "; then
+        SOV="$STAGE/system_ext_overlay"
+        mount | grep -q " $SOV " || $BB mount -t tmpfs tmpfs "$SOV"
+        mkdir -p "$SOV/upper" "$SOV/work"
+        if mount -t overlay overlay -o "lowerdir=$SYSEXT_DIR,upperdir=$SOV/upper,workdir=$SOV/work" "$SYSEXT_DIR" 2>/dev/null; then
+            for sub in etc priv-app; do
+                [ -d "$GAPPS/system_ext/$sub" ] || continue
+                mkdir -p "$SYSEXT_DIR/$sub"
+                cp -a "$GAPPS/system_ext/$sub/." "$SYSEXT_DIR/$sub/" 2>/dev/null
+                echo "  + system_ext/$sub"
+            done
+            chcon -R u:object_r:system_file:s0 "$SYSEXT_DIR/etc" "$SYSEXT_DIR/priv-app" 2>/dev/null || true
+        else
+            echo "  !!! could not overlay $SYSEXT_DIR - system_ext GApps skipped"
+        fi
+    fi
 fi
 if [ -d /product/apex ] && [ -d "$PRODUCT_APEX" ]; then
     mount | grep -q " $PRODUCT_APEX " || $BB mount --bind /product/apex "$PRODUCT_APEX"
@@ -970,6 +1008,58 @@ elif [ -f "$AIL" ]; then
     echo "</apex-info-list>" >> "$AIL.new"
     mv -f "$AIL.new" "$AIL"; chmod 644 "$AIL"
     echo "apex-info-list: $(grep -c '<apex-info ' "$AIL") entries"
+fi
+
+echo "=== 9d. Activating the MindTheGapps GMS APEX (optional) ==="
+# MindTheGapps ships GMS core as a preinstalled APEX. The host apexd never
+# activated it (it belongs to the staged GSI, not the host), so do it the same
+# way mount_payload does for the GSI's own APEXes: extract apex_payload.img,
+# loop-mount it under /apex, and add an apex-info-list entry so PMS scans it.
+# Best-effort: failure here only loses GMS core, not the rest of GApps.
+GMS_APEX=$(ls "$STAGE/gapps/system/product/apex/"com.google.android.gmssystem*.apex 2>/dev/null | head -1)
+if [ -f "$STAGE/install_gapps.flag" ] && [ -n "$GMS_APEX" ] && [ -f "$ROOTFS/apex/apex-info-list.xml" ]; then
+    GMS_NAME="com.google.android.gmssystem"
+    # Decode version (apex_manifest.pb field 2 varint) for the @<ver> dir + info-list.
+    $BB unzip -p "$GMS_APEX" apex_manifest.pb > "$STAGE/gms_manifest.pb" 2>/dev/null
+    GMS_VER=$($BB od -An -tu1 "$STAGE/gms_manifest.pb" 2>/dev/null | tr -s ' ' '\n' | grep -v '^$' | awk '
+        BEGIN{s=0; st=0; v=0; sh=0}
+        { b=$1+0
+          if(st==0){ if(b==16){st=1; v=0; sh=0} next }   # 0x10 = field 2 (version), wire type 0
+          v += (b%128) * (2^sh); sh+=7; if(b<128){print v; exit} }')
+    [ -n "$GMS_VER" ] || GMS_VER=1
+    rm -f "$STAGE/gms_manifest.pb"
+    # Put the apex file where the info-list modulePath points (survives 9b's check).
+    mkdir -p "$PRODUCT_DIR/apex"
+    cp -f "$GMS_APEX" "$PRODUCT_DIR/apex/$(basename "$GMS_APEX")" 2>/dev/null
+    GMS_PATH="/product/apex/$(basename "$GMS_APEX")"
+    # Extract and mount the payload.
+    GMS_IMG="$STAGE/gmssystem_payload.img"
+    if [ ! -s "$GMS_IMG" ]; then
+        if $BB unzip -l "$GMS_APEX" 2>/dev/null | grep -q " original_apex$"; then
+            $BB unzip -p "$GMS_APEX" original_apex > "$STAGE/temp_gms.apex" 2>/dev/null
+            $BB unzip -p "$STAGE/temp_gms.apex" apex_payload.img > "$GMS_IMG" 2>/dev/null
+            rm -f "$STAGE/temp_gms.apex"
+        else
+            $BB unzip -p "$GMS_APEX" apex_payload.img > "$GMS_IMG" 2>/dev/null
+        fi
+        [ -s "$GMS_IMG" ] || rm -f "$GMS_IMG"
+    fi
+    if [ -s "$GMS_IMG" ]; then
+        for DEST in "$ROOTFS/apex/$GMS_NAME" "$ROOTFS/apex/${GMS_NAME}@${GMS_VER}"; do
+            mkdir -p "$DEST"; $BB umount -l "$DEST" 2>/dev/null || true
+            L=$($BB losetup -f); $BB losetup "$L" "$GMS_IMG"
+            $BB mount -t ext4 -o ro "$L" "$DEST" 2>/dev/null || mount -t erofs -o ro "$L" "$DEST" 2>/dev/null || true
+        done
+        # Add an apex-info-list entry (before the closing tag) if not present.
+        AIL="$ROOTFS/apex/apex-info-list.xml"
+        if ! grep -q "moduleName=\"$GMS_NAME\"" "$AIL"; then
+            ENTRY="  <apex-info moduleName=\"$GMS_NAME\" modulePath=\"$GMS_PATH\" preinstalledModulePath=\"$GMS_PATH\" versionCode=\"$GMS_VER\" versionName=\"$GMS_VER\" isFactory=\"true\" isActive=\"true\" provideSharedApexLibs=\"false\" />"
+            $BB sed -i "s#</apex-info-list>#$ENTRY\n</apex-info-list>#" "$AIL"
+        fi
+        echo "GMS APEX activated: $GMS_NAME@$GMS_VER ($GMS_PATH)"
+    else
+        echo "  !!! could not extract GMS apex payload - Play Store will lack GMS core"
+    fi
 fi
 
 # PermissionController patch, second pass. The same block near step 4 runs

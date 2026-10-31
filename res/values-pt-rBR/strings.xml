@@ -125,4 +125,14 @@
     <string name="log_backup_failed">Falha ao salvar: %1$s</string>
     <string name="log_launcher_restore_start">\nRestaurando o layout da tela inicial da One UI…</string>
     <string name="log_launcher_restore_failed">Falha ao restaurar: %1$s</string>
+    <string name="btn_install_gapps">Instalar GApps (MindTheGapps)</string>
+    <string name="btn_installing_gapps">Instalando GApps…</string>
+    <string name="progress_gapps_downloading">Baixando MindTheGapps…</string>
+    <string name="progress_gapps_extracting">Extraindo MindTheGapps…</string>
+    <string name="progress_gapps_done">GApps preparado — alterne para o LineageOS para aplicar</string>
+    <string name="log_gapps_need_image">ERRO: instale a imagem do LineageOS primeiro e depois adicione o GApps.</string>
+    <string name="log_gapps_start">\n[GAPPS] Baixando MindTheGapps 17…</string>
+    <string name="log_gapps_extract">[GAPPS] Extraindo para a imagem preparada…</string>
+    <string name="log_gapps_done">✓ MindTheGapps preparado. Será aplicado na próxima troca para o LineageOS.</string>
+    <string name="log_gapps_fail">Falha ao instalar o GApps: %1$s</string>
 </resources>

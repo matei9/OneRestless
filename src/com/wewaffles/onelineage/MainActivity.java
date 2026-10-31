@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private RadioButton rbVanilla;
 
     private Button btnDownloadLineage;
+    private Button btnInstallGapps;
     private Button btnDeleteLineage;
     private Button btnBootLineage;
     private Button btnReturnOneUI;
@@ -135,6 +136,7 @@ public class MainActivity extends Activity {
         rbVanilla = findViewById(R.id.rb_vanilla);
 
         btnDownloadLineage = findViewById(R.id.btn_download_lineage);
+        btnInstallGapps = findViewById(R.id.btn_install_gapps);
         btnDeleteLineage = findViewById(R.id.btn_delete_lineage);
         btnBootLineage = findViewById(R.id.btn_boot_lineage);
         btnReturnOneUI = findViewById(R.id.btn_return_oneui);
@@ -151,6 +153,7 @@ public class MainActivity extends Activity {
         checkRootAndSystem();
 
         btnDownloadLineage.setOnClickListener(v -> downloadLineage());
+        btnInstallGapps.setOnClickListener(v -> installGapps());
         btnDeleteLineage.setOnClickListener(v -> confirmDeleteLineage());
         btnBootLineage.setOnClickListener(v -> bootLineage());
         btnReturnOneUI.setOnClickListener(v -> returnToOneUI());
@@ -721,6 +724,67 @@ public class MainActivity extends Activity {
             return;
         }
         startNetworkDownload(selectedFlavor);
+    }
+
+    // Download MindTheGapps and stage its system/ tree; master_prepare.sh overlays
+    // it into the guest on the next switch. Requires the vanilla image installed.
+    private void installGapps() {
+        if (downloadRunning) return;
+        if (!isRootGranted) {
+            appendLog(getString(R.string.log_root_required_setup));
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                if (runRootCmdDrained("[ -f " + SYSTEM_RAW + " ]") != 0) {
+                    appendLog(getString(R.string.log_gapps_need_image));
+                    return;
+                }
+                downloadRunning = true;
+                mainHandler.post(() -> {
+                    btnInstallGapps.setEnabled(false);
+                    btnInstallGapps.setText(R.string.btn_installing_gapps);
+                    pbDownload.setVisibility(View.VISIBLE);
+                    pbDownload.setIndeterminate(false);
+                    tvDownloadProgress.setVisibility(View.VISIBLE);
+                    tvDownloadProgress.setText(R.string.progress_gapps_downloading);
+                });
+                appendLog(getString(R.string.log_gapps_start));
+                setLogStatus(getString(R.string.progress_gapps_downloading));
+                final File zip = new File(getCacheDir(), "mindthegapps.zip");
+                downloadFileWithRedirects(URL_MINDTHEGAPPS, zip, ESTIMATED_GAPPS_BYTES);
+
+                appendLog(getString(R.string.log_gapps_extract));
+                setLogStatus(getString(R.string.progress_gapps_extracting));
+                mainHandler.post(() -> {
+                    pbDownload.setIndeterminate(true);
+                    tvDownloadProgress.setText(R.string.progress_gapps_extracting);
+                });
+                // 7zz runs as root and reads the app cache dir (same as the GSI flow).
+                String cmd = "rm -rf " + STAGE_DIR + "/gapps && mkdir -p " + STAGE_DIR + "/gapps && " +
+                        STAGE_DIR + "/7zz x -y -o" + STAGE_DIR + "/gapps " + zip.getAbsolutePath() + " system && " +
+                        "rm -f " + zip.getAbsolutePath();
+                int rc = runRootCmdDrained(cmd);
+                if (rc != 0 || runRootCmdDrained("[ -d " + STAGE_DIR + "/gapps/system/product ]") != 0) {
+                    throw new Exception("extract rc=" + rc);
+                }
+                runRootCmdDrained("touch " + STAGE_DIR + "/install_gapps.flag");
+                appendLog(getString(R.string.log_gapps_done));
+                mainHandler.post(() -> {
+                    pbDownload.setVisibility(View.GONE);
+                    tvDownloadProgress.setText(R.string.progress_gapps_done);
+                });
+            } catch (Exception e) {
+                appendLog(getString(R.string.log_gapps_fail, String.valueOf(e.getMessage())));
+            } finally {
+                downloadRunning = false;
+                setLogStatus(getString(R.string.status_idle));
+                mainHandler.post(() -> {
+                    btnInstallGapps.setEnabled(true);
+                    btnInstallGapps.setText(R.string.btn_install_gapps);
+                });
+            }
+        });
     }
 
     private void toggleDownloadPause() {
