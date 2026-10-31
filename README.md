@@ -29,8 +29,10 @@ Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on
 > It may not work on other Samsung models, other One UI versions, or other devices at all. It is experimental, it replaces core parts of a running system, and it can crash, hang or soft-brick your phone, fill `/data`, or break radio/SMS. **Back up everything first. Use at your own risk.**
 > Also, I did use AI a fair bit in this project, it would have taken a LOT longer without it.
 
+> Hey, Contributor RealThalesGit here, if you somewhat get throw back to one ui after getting stuck at lineage boot screen, check your manager modules.
+
 ## Requirements
-- A rooted Samsung phone (the tested one is an S26 Ultra on One UI 8.5)
+- A rooted samsung phone (the tested ones are: S26 Ultra and Samsung A25, both at One UI 8.5.) (Can be temp-root too.)
 - Enough free space on `/data` for the extracted GSI
 - Internet access for the GSI download (LineageOS 23.2 GSI, EXT4, VANILLA or GAPPS builds from SourceForge)
 
@@ -67,8 +69,16 @@ Hot-switch between stock **One UI** and a **LineageOS 23.2 (Android 16) GSI** on
 12. **Boot diagnostics.** Each boot writes `/data/boot_failures.log`.
 
 ## Building
-Edit the paths at the top of `build_apk.sh` (JDK 17, Android SDK build-tools 34, android-34 platform), provide your own signing keystore, then run `./build_apk.sh`.
+Set `ANDROID_SDK` (or `ANDROID_HOME`) to your Android SDK directory and run `./build_apk.sh`; it writes `build/OneRestless.apk` and creates a development keystore on first use. The build also assembles `svcstub.dex` and the device overlays under `overlay/`. Defaults target build-tools 34.0.0 / android-34, but on a newer JDK (e.g. 27) `d8` from build-tools 34 can crash — pass build-tools 35 instead:
+
+```sh
+SDK_TOOLS=$ANDROID_SDK/build-tools/35.0.0 \
+PLATFORM_JAR=$ANDROID_SDK/platforms/android-35/android.jar ./build_apk.sh
+```
+
+Override `ANDROID_SDK`, `SDK_TOOLS`, `PLATFORM_JAR`, or `OUT_APK` as needed. `EXTRA_ASSETS_DIR` supplies locally-built assets (e.g. jars patched from a license-restricted GSI) that replace same-named files in `assets/` for that build only.
 
 ## Credits
-LineageOS GSI builds by MisterZtr (SourceForge). RestlessOS Treble GSI builds by
-[cawilliamson](https://github.com/cawilliamson) ([treble_restlessos](https://github.com/cawilliamson/treble_restlessos)). LineageOS and Android are trademarks of their respective owners. Not affiliated with Samsung, Google or LineageOS.
+OneLineage by WeWaffles. RestlessOS Treble GSI builds by
+[cawilliamson](https://github.com/cawilliamson) ([treble_restlessos](https://github.com/cawilliamson/treble_restlessos)).
+LineageOS GSI builds by MisterZtr (SourceForge). LineageOS and Android are trademarks of their respective owners. Not affiliated with Samsung, Google or LineageOS.
