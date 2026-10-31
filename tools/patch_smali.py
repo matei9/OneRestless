@@ -232,6 +232,16 @@ def torch_skips_logical_cameras(body):
     ] + body[i:]
 
 
+def shorter_boot_timeout(body):
+    """The guest waits for windows until WindowManager's 30 s boot timeout, and the
+    user unlock and the real launcher only come after it. Until then the screen
+    shows FallbackHome and Trebuchet crash-loops, so the phone looks unresponsive."""
+    for i, l in enumerate(body):
+        if re.search(r"mul-int/lit16 v\d+, v\d+, 0x7530$", l.rstrip()):
+            return body[:i] + [l.replace("0x7530", "0x1388")] + body[i + 1:]
+    return None
+
+
 # ---- align binder transaction codes with the host -----------------------
 # The guest's apps talk straight to the HOST's native daemons (cameraserver,
 # audioserver, ...), and those call back into the guest's system_server. Samsung
@@ -335,6 +345,8 @@ def main(fw, svc, host=None):
              stub("void"), "skip permission enforce")
 
     print("services.jar")
+    edit(svc, "com/android/server/wm/WindowManagerService", "enableScreenAfterBoot()V",
+         shorter_boot_timeout, "5 s boot timeout")
     edit(svc, "com/android/server/Watchdog", "run()V",
          delete_lines(r"Landroid/os/Process;->killProcess\(I\)V", r"Ljava/lang/System;->exit\(I\)V"),
          "never kill system_server")
