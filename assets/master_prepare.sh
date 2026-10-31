@@ -761,7 +761,12 @@ while true; do
     netout=$(/system/bin/sh /data/local/tmp/net_fix.sh 2>/dev/null)
     [ -n "$netout" ] && echo "$(date) $netout" >> /data/app_storage.log
     cur=$(md5sum /data/system/packages.list 2>/dev/null | cut -d' ' -f1)
-    out=$(/system/bin/sh /data/local/tmp/ensure_app_storage.sh 2>/dev/null)
+    # The sweep forks for every package (~25 s of CPU on the A17), so once booted
+    # only run it when the package list changed instead of all the time.
+    out=""
+    if [ "$booted" = 0 ] || [ "$cur" != "$last" ]; then
+        out=$(/system/bin/sh /data/local/tmp/ensure_app_storage.sh 2>/dev/null)
+    fi
     if [ "$booted" = 1 ] && [ -n "$last" ] && { [ "$cur" != "$last" ] || [ -n "$out" ]; }; then
         # A package appeared or went away. LauncherApps caches the app list, so
         # something installed from Aurora or Play Store is missing from both the
