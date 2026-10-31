@@ -156,3 +156,8 @@ The app's **Install GApps** button downloads MindTheGapps 17 and extracts its
 The product/system_ext overlay (Play Store, sync adapters, permissions,
 sysconfig) is the reliable part; the GMS-APEX activation in the init-less
 container is best-effort and still being validated on-device.
+
+## LineageOS 24.0 bring-up
+| Where | Change | Why |
+|---|---|---|
+| services `PermissionManagerService.create` | skip the `getService("permissionmgr")` lookup | the shared servicemanager returns the host's binder proxy, and casting it to the local class threw `ClassCastException` in system_server |

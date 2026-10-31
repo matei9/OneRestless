@@ -171,6 +171,33 @@ def weaver_slots_from_top(body):
                           "    add-int/lit8 v2, v2, -0x1"]
     return out
 
+def pm_build_own_permissionmgr(body):
+    """PermissionManagerService.create() does getService("permissionmgr") and
+    check-casts the result to the local PermissionManagerService. In the
+    container the guest shares the host's servicemanager, so it gets the HOST's
+    binder proxy and the cast throws ClassCastException, killing system_server.
+    Replace the getService + check-cast with null so the guest always builds and
+    registers its own permissionmgr."""
+    for i, l in enumerate(body):
+        if "check-cast" in l and l.rstrip().endswith("Lcom/android/server/pm/permission/PermissionManagerService;"):
+            m = re.match(r"\s*check-cast (v\d+|p\d+),", l)
+            if not m:
+                continue
+            reg = m.group(1)
+            j = i - 1
+            while j >= 0 and not body[j].strip():
+                j -= 1
+            if j < 0 or not re.match(r"\s*move-result-object " + reg + r"\b", body[j]):
+                continue
+            k = j - 1
+            while k >= 0 and not body[k].strip():
+                k -= 1
+            if k < 0 or "ServiceManager;->getService(" not in body[k]:
+                continue
+            indent = re.match(r"(\s*)", body[k]).group(1)
+            return body[:k] + [indent + "const/4 " + reg + ", 0x0"] + body[i + 1:]
+    return None
+
 def unknown_flag_is_false(body):
     """Container can't read Android 17 aconfig storage, so getFlagValue() is
     null for every flag; treat unknown as disabled instead of throwing."""
@@ -315,6 +342,9 @@ def main(fw, svc, host=None):
          "guest takes Weaver slots from the top down")
     edit(svc, "com/android/server/permission/access/appop/AppOpService", "createPermissionAppOpMapping()V",
          appop_skip_missing_permission, "tolerate missing permission defs")
+    edit(svc, "com/android/server/pm/permission/PermissionManagerService",
+         "create(Landroid/content/Context;Landroid/util/ArrayMap;)Lcom/android/server/pm/permission/PermissionManagerServiceInternal;",
+         pm_build_own_permissionmgr, "build own permissionmgr, not the host's proxy")
     edit(svc, "com/android/server/pm/UserDataPreparer", "prepareUserData(Landroid/content/pm/UserInfo;I)V",
          stub("void"), "no installd/vold")
     edit(svc, "com/android/server/pm/UserDataPreparer", "prepareUserDataLI(Ljava/lang/String;Landroid/content/pm/UserInfo;IZ)V",
