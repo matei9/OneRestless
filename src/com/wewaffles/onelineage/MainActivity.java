@@ -655,7 +655,7 @@ public class MainActivity extends Activity {
                 "master_prepare.sh", "master_inner.sh",
                 "zygote_exec", "zygote_classpath.env", "clean_apex_info_list.xml",
                 "services_patched.jar", "framework_patched.jar",
-                "service-connectivity_patched.jar", "svcstub.dex",
+                "service-connectivity_patched.jar", "svcstub.dex", "libstagefright_patched.so",
                 "treble-overlay-FrameworkResA17x.apk", "treble-overlay-SystemUIA17x.apk",
                 "7zz"
             };

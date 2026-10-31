@@ -339,53 +339,14 @@ if [ -f "$STAGE/svcstub.dex" ] && ! ps -ef 2>/dev/null | grep -v grep | grep -q 
     echo "placeholder services: $(tr '\n' ' ' < /data/local/tmp/svcstub.log 2>/dev/null)"
 fi
 
-# Stop the HOST media codec stack. The guest's libmedia binds `media.codec` from
-# the shared servicemanager, i.e. Samsung's mediaserver - whose IMediaCodecList
-# AIDL hash differs from the GSI's. The reply parcel is then parsed as garbage
-# ("enforceInterface() expected 'android.gui.IGraphicBufferProducer' but read
-# 'android.media.IMediaCodecList'", "AString: ctor got NULL"), which yields a
-# codec list with a bogus length, so findCodecForFormat -> codecHandlesFormat
-# spins ~2M times inside both system_server and SystemUI, round-tripping to
-# mediaserver each iteration. That is the 125% CPU / constant overheating / GB
-# of logcat. With no media.codec registered the lookup fails fast and the list
-# is empty. Audio is unaffected (audioserver is its own process and is kept).
-# mediaserver must stay UP even though the codec list is unusable: apps play
-# short sounds with MediaPlayer, and MediaPlayer.setDataSource blocks in
-# IMediaDeathNotifier::getMediaPlayerService when "media.player" is missing.
-# That is a 5 s main-thread stall -> ANR -> force-close: Messaging died on every
-# send because of its "sent" sound (playSentSound), and any app doing the same
-# would die too. Keep only the codec processes down, which is what causes the
-# spin described above.
+# Samsung's mediaserver stays up: apps play short sounds with MediaPlayer, and
+# MediaPlayer.setDataSource blocks in IMediaDeathNotifier::getMediaPlayerService
+# when "media.player" is missing (5 s main-thread stall, ANR, force-close).
 setprop ctl.start media 2>/dev/null || true
-for svc in media.codec media.metrics; do
-    setprop ctl.stop $svc 2>/dev/null || true
-done
-kill -9 $(pidof media.codec) $(pidof media.metrics) 2>/dev/null || true
-
-# Samsung's init restarts media.codec on demand whenever any binder client
-# requests IMediaCodecList. The one-shot kill above is not enough: within
-# seconds the guest's system_server (or SystemUI) triggers a new lookup, init
-# respawns media.codec, and the AIDL hash mismatch drives the ~2M-iteration
-# codecHandlesFormat spin all over again. That spin saturates the system_server
-# binder thread pool, hits its 60-second watchdog, and kills system_server —
-# which is what "Lineage reboots / restarts after ~1 minute" looks like. Keep a
-# daemon that immediately kills any media.codec that init brings back.
-if ! ps -ef 2>/dev/null | grep -v grep | grep -q "media_codec_suppress"; then
-    nohup $BB sh -c "
-while true; do
-    sleep 3
-    if pidof media.codec >/dev/null 2>&1; then
-        setprop ctl.stop media.codec 2>/dev/null || true
-        kill -9 \$(pidof media.codec) 2>/dev/null || true
-    fi
-    if pidof media.metrics >/dev/null 2>&1; then
-        setprop ctl.stop media.metrics 2>/dev/null || true
-        kill -9 \$(pidof media.metrics) 2>/dev/null || true
-    fi
-done
-" </dev/null >/dev/null 2>&1 &
-    echo "media.codec suppressor started"
-fi
+# media.codec stays up: the guest's libstagefright is patched to build its codec
+# list locally (tools/patch_stagefright.py) and needs the OMX service it hosts.
+setprop ctl.stop media.metrics 2>/dev/null || true
+kill -9 $(pidof media.metrics) 2>/dev/null || true
 
 # Same handover for wifi. The guest's WifiService binds IWificond (service
 # "wifinl80211") and drives the vendor HAL through it. Samsung's wificond is

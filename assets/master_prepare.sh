@@ -229,6 +229,13 @@ if [ -f "$STAGE/framework_patched.jar" ]; then
     echo "Bound framework_patched.jar -> $ROOTFS/system/framework/framework.jar"
     echo "  framework_patched.jar md5 $(md5sum "$STAGE/framework_patched.jar" | cut -c1-12)"
 fi
+if [ -f "$STAGE/libstagefright_patched.so" ]; then
+    chmod 644 "$STAGE/libstagefright_patched.so"
+    chcon u:object_r:system_lib_file:s0 "$STAGE/libstagefright_patched.so" 2>/dev/null
+    mount | grep -q "$ROOTFS/system/lib64/libstagefright.so " || \
+        $BB mount --bind "$STAGE/libstagefright_patched.so" "$ROOTFS/system/lib64/libstagefright.so"
+    echo "Bound libstagefright_patched.so (local codec list)"
+fi
 if [ -f "$STAGE/libaudio_aidl_conversion_common_cpp_patched.so" ]; then
     $BB umount -l "$ROOTFS/system/lib64/libaudio_aidl_conversion_common_cpp.so" 2>/dev/null || true
     $BB mount --bind "$STAGE/libaudio_aidl_conversion_common_cpp_patched.so" "$ROOTFS/system/lib64/libaudio_aidl_conversion_common_cpp.so"
