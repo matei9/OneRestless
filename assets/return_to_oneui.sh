@@ -26,6 +26,7 @@ pkill -9 -f "ims_watchdog.sh" 2>/dev/null || true
 # Stop the suppressors started by switch_to_lineage.sh so One UI's own
 # media.codec and rescue_boot_count handling is restored.
 pkill -9 -f "media_codec_suppress" 2>/dev/null || true
+pkill -9 -f "tsp_keepalive" 2>/dev/null || true
 pkill -9 -f "rescue_boot_suppress" 2>/dev/null || true
 pkill -9 -f "system_server" 2>/dev/null || true
 pkill -9 -f org.lineageos 2>/dev/null || true

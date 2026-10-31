@@ -410,6 +410,22 @@ chmod 755 /data/local/tmp/dexopt_suppress.sh
 $BB setsid sh /data/local/tmp/dexopt_suppress.sh </dev/null >/dev/null 2>&1 &
 echo "[takeover] background dexopt suppressor started"
 
+# One UI enables the touch controller on screen-on and the guest doesn't, and the
+# driver turns it off with the panel, so touch was dead after boot and could die on
+# any screen-off. Keep it on while the backlight is lit. sec_input takes
+# "<display state>,<event>": 2,1 is display on, late event.
+cat > /data/local/tmp/tsp_keepalive.sh <<'TSP'
+#!/system/bin/sh
+while true; do
+    sleep 2
+    [ "$(cat /sys/class/backlight/panel/brightness 2>/dev/null)" != "0" ] || continue
+    [ "$(cat /sys/class/sec/tsp/enabled 2>/dev/null)" = "0" ] || continue
+    echo 2,1 > /sys/class/sec/tsp/enabled 2>/dev/null
+done
+TSP
+chmod 755 /data/local/tmp/tsp_keepalive.sh
+$BB setsid sh /data/local/tmp/tsp_keepalive.sh </dev/null >/dev/null 2>&1 &
+
 # Start UI Activator daemon
 $BB sh -c "
 BB=\"$BB\"
