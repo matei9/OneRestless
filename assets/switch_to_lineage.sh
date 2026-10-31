@@ -423,6 +423,32 @@ $BB unshare -m $BB sh "$STAGE/data/master_inner.sh" </dev/null >"$STAGE/data/tak
 TAKEOVER_PID=$!
 echo "Takeover daemon PID: $TAKEOVER_PID"
 
+# Suppress ART's background dexopt for the first few minutes of the session.
+# RestlessOS (GrapheneOS ART) ignores pm.dexopt.disable_bg_dexopt, so its
+# scheduled bg-dexopt job recompiles every system package (~145) at full CPU
+# the moment the guest boots while charging: the phone overheats and
+# WindowManager is starved so SystemUI never comes up (black screen after the
+# boot animation). Cancel the job and kill any dex2oat it spawns, time-boxed so
+# normal on-demand dexopt still works later once the UI is up.
+cat > /data/local/tmp/dexopt_suppress.sh <<'DEXSUP'
+#!/system/bin/sh
+BB=$(which busybox 2>/dev/null || echo /data/adb/ksu/bin/busybox)
+[ -x "$BB" ] || BB=$(find /data/adb /system /data -name busybox 2>/dev/null | head -n 1)
+end=$(( $(date +%s) + 300 ))
+while [ "$(date +%s)" -lt "$end" ]; do
+    P=$(pidof system_server 2>/dev/null | awk '{print $1}')
+    if [ -n "$P" ]; then
+        $BB nsenter -t "$P" -m /system/bin/cmd package bg-dexopt-job --cancel >/dev/null 2>&1 || true
+        $BB nsenter -t "$P" -m /system/bin/pm bg-dexopt-job --cancel >/dev/null 2>&1 || true
+    fi
+    pkill -9 -f dex2oat 2>/dev/null || true
+    sleep 4
+done
+DEXSUP
+chmod 755 /data/local/tmp/dexopt_suppress.sh
+$BB setsid sh /data/local/tmp/dexopt_suppress.sh </dev/null >/dev/null 2>&1 &
+echo "[takeover] background dexopt suppressor started"
+
 # Start UI Activator daemon
 $BB sh -c "
 BB=\"$BB\"
@@ -440,8 +466,9 @@ while true; do
             $BB nsenter -t \$PID -m /system/bin/settings put global stay_on_while_plugged_in 7
             $BB nsenter -t \$PID -m /system/bin/settings put system screen_off_timeout 2147483647
             $BB nsenter -t \$PID -m /system/bin/settings put system haptic_feedback_enabled 1
-            $BB nsenter -t \$PID -m /system/bin/settings put system peak_refresh_rate 120.0
-            $BB nsenter -t \$PID -m /system/bin/settings put system min_refresh_rate 120.0
+            # A17 panel is 90 Hz (not the S26's 120); force the panel's real max.
+            $BB nsenter -t \$PID -m /system/bin/settings put system peak_refresh_rate 90.0
+            $BB nsenter -t \$PID -m /system/bin/settings put system min_refresh_rate 90.0
             # Gesture navigation. The GSI boots with the three-button overlay, and
             # this line used to force it back on every takeover.
             $BB nsenter -t \$PID -m /system/bin/cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural 2>/dev/null || true
