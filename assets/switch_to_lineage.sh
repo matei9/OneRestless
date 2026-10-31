@@ -284,6 +284,15 @@ kill -9 $(pidof zygote_exec) 2>/dev/null || true
 kill -9 $(pidof zygote64) 2>/dev/null || true
 kill -9 $(pidof webview_zygote) 2>/dev/null || true
 kill -9 $(pidof system_server) 2>/dev/null || true
+
+# One UI's ConnectivityService puts its satellite-optimized apps on the UNREACHABLE
+# network (52) at priority 40, and netd outlives it. Those are host uids, but the
+# guest numbers its apps differently: uid 10191 is a Samsung app there and GMS here,
+# so GMS's DNS went to a network with no nameservers and Google sign-in failed with
+# ERR_NAME_NOT_RESOLVED. 107 is INetd.networkRemoveUidRangesParcel.
+for uid in $(dumpsys netd 2>/dev/null | grep -A1 -E '^ +52 UNREACHABLE' | sed -n 's/.*prio 40 uids{ \([0-9 ]*\) }.*/\1/p'); do
+    service call netd 107 i32 1 i32 32 i32 52 i32 1 i32 1 i32 12 i32 "$uid" i32 "$uid" i32 40 >/dev/null 2>&1
+done
 sleep 1
 
 # --- SOFTDOG FEEDER -------------------------------------------------------
