@@ -496,20 +496,6 @@ while true; do
             DEF_IF=\$(ip route | grep -o 'dev [^ ]*' | head -n 1 | awk '{print \$2}')
             [ -n \"\$DEF_IF\" ] && ip route add default dev \"\$DEF_IF\" 2>/dev/null || true
 
-            # Mount emulated primary storage. StorageManagerService creates the
-            # volumes before user 0 counts as unlocked, finds no ExternalStorageService
-            # then (\"user 0 does not support external storage\"), drops emulated;0
-            # and never retries. set-virtual-disk (to its default, false) makes it
-            # reset vold and recreate the volumes now that user 0 is unlocked; then
-            # retry the mount (vold needs a moment to register; failing is non-fatal).
-            $BB nsenter -t \$PID -m /system/bin/sm set-virtual-disk false 2>/dev/null || true
-            sleep 2
-            _sm_ok=0
-            for _attempt in 1 2 3 4 5; do
-                $BB nsenter -t \$PID -m /system/bin/sm mount \"emulated;0\" 2>/dev/null && _sm_ok=1 && break
-                sleep 2
-            done
-            echo \"[UI Activator] sm mount result: _sm_ok=\$_sm_ok (attempts: \$_attempt)\"
             break
         fi
     fi

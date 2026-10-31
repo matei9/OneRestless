@@ -773,6 +773,26 @@ while true; do
         echo "$(date) $out" >> /data/app_storage.log
     fi
     last=$cur
+
+    # Mount emulated primary storage, here because this loop outlives every boot.
+    # StorageManagerService creates the volumes before user 0 counts as unlocked,
+    # finds no ExternalStorageService then ("user 0 does not support external
+    # storage") and never retries. set-virtual-disk (to its default, false) makes
+    # it reset vold and recreate them; without that sm mount still succeeds and the
+    # volume reads "mounted", but no FUSE session exists and storage is empty, so
+    # only the FUSE mount counts. Waits for the status bar, and for 15 s between
+    # tries since each reset drops anything mid-mount.
+    grep -q ' /mnt/user/0/emulated fuse ' /proc/self/mounts && continue
+    now=$(date +%s)
+    [ $(( now - ${tried_at:-0} )) -ge 15 ] || continue
+    tried_at=$now
+    dumpsys window 2>/dev/null | grep -q mStatusBar || continue
+    sm set-virtual-disk false 2>/dev/null
+    sleep 3
+    sm mount "emulated;0" 2>/dev/null
+    sleep 4
+    grep -q ' /mnt/user/0/emulated fuse ' /proc/self/mounts &&
+        echo "$(date) internal storage mounted" >> /data/app_storage.log
 done
 APPLOOP
 chmod 755 "$STAGE/data/local/tmp/app_storage_loop.sh" 2>/dev/null || true
