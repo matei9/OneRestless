@@ -209,6 +209,29 @@ def unknown_flag_is_false(body):
     return None
 
 
+def torch_skips_logical_cameras(body):
+    """SystemUI's flashlight picks the first back camera with a flash that has
+    physical cameras, then falls back to any. Samsung lists its private logical
+    camera 23, which claims a flash but cameraserver refuses torch on ("does not
+    have a flash unit"), so the tile stays unavailable. Show SystemUI no physical
+    cameras and it lands on camera 0; other apps still see the logical cameras."""
+    i = next((k for k, l in enumerate(body) if l.strip().startswith(".line")), None)
+    if i is None or body[0].strip() != ".locals 1":
+        return None
+    return [body[0].replace("1", "2")] + body[1:i] + [
+        "    invoke-static {}, Landroid/app/ActivityThread;->currentPackageName()Ljava/lang/String;",
+        "    move-result-object v0",
+        '    const-string v1, "com.android.systemui"',
+        "    invoke-virtual {v1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z",
+        "    move-result v0",
+        "    if-eqz v0, :not_systemui",
+        "    invoke-static {}, Ljava/util/Collections;->emptySet()Ljava/util/Set;",
+        "    move-result-object v0",
+        "    return-object v0",
+        "    :not_systemui",
+    ] + body[i:]
+
+
 # ---- align binder transaction codes with the host -----------------------
 # The guest's apps talk straight to the HOST's native daemons (cameraserver,
 # audioserver, ...), and those call back into the guest's system_server. Samsung
@@ -298,6 +321,8 @@ def main(fw, svc, host=None):
                 "isUserUnlocked(Landroid/os/UserHandle;)Z", "isUserUnlockingOrUnlocked(I)Z"]:
         edit(fw, "android/os/UserManager", sig, stub("0x1"), "always unlocked")
     edit(fw, "android/os/storage/StorageManager", "isCeStorageUnlocked(I)Z", stub("0x1"), "CE always unlocked")
+    edit(fw, "android/hardware/camera2/CameraCharacteristics", "getPhysicalCameraIds()Ljava/util/Set;",
+         torch_skips_logical_cameras, "flashlight tile uses camera 0")
     for n in ["disable", "enable", "getSecureLockDeviceAvailability", "isSecureLockDeviceEnabled",
               "registerSecureLockDeviceStatusListener", "unregisterSecureLockDeviceStatusListener"]:
         sig = (n + "SecureLockDevice" if n in ("disable", "enable") else n) + "_enforcePermission()V"
